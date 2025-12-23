@@ -1,0 +1,191 @@
+name: Check for Updates
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Daily at 6 AM UTC
+  workflow_dispatch:
+
+jobs:
+  check-flux-security:
+    name: Check flux-security updates
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.check.outputs.new_version }}
+      current_version: ${{ steps.check.outputs.current_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get current version
+        id: current
+        run: |
+          version=$(grep '^Version:' flux-security/flux-security.spec | awk '{print $2}')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Get latest release
+        id: latest
+        run: |
+          version=$(curl -s https://api.github.com/repos/flux-framework/flux-security/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Check for update
+        id: check
+        run: |
+          echo "current_version=${{ steps.current.outputs.version }}" >> $GITHUB_OUTPUT
+          if [ "${{ steps.current.outputs.version }}" != "${{ steps.latest.outputs.version }}" ]; then
+            echo "new_version=${{ steps.latest.outputs.version }}" >> $GITHUB_OUTPUT
+            echo "Update available: ${{ steps.current.outputs.version }} -> ${{ steps.latest.outputs.version }}"
+          else
+            echo "No update available"
+          fi
+
+  check-flux-core:
+    name: Check flux-core updates
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.check.outputs.new_version }}
+      current_version: ${{ steps.check.outputs.current_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get current version
+        id: current
+        run: |
+          version=$(grep '^Version:' flux-core/flux-core.spec | awk '{print $2}')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Get latest release
+        id: latest
+        run: |
+          version=$(curl -s https://api.github.com/repos/flux-framework/flux-core/releases/latest | jq -r '.tag_name' | sed 's/^v//')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Check for update
+        id: check
+        run: |
+          echo "current_version=${{ steps.current.outputs.version }}" >> $GITHUB_OUTPUT
+          if [ "${{ steps.current.outputs.version }}" != "${{ steps.latest.outputs.version }}" ]; then
+            echo "new_version=${{ steps.latest.outputs.version }}" >> $GITHUB_OUTPUT
+            echo "Update available: ${{ steps.current.outputs.version }} -> ${{ steps.latest.outputs.version }}"
+          else
+            echo "No update available"
+          fi
+
+  update-flux-security:
+    name: Update flux-security
+    needs: check-flux-security
+    if: needs.check-flux-security.outputs.new_version != ''
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: dnf install -y cpio curl jq
+
+      - name: Download new SRPM
+        run: |
+          VERSION="${{ needs.check-flux-security.outputs.new_version }}"
+          ASSETS=$(curl -s "https://api.github.com/repos/flux-framework/flux-security/releases/tags/v${VERSION}")
+          SRPM_URL=$(echo "$ASSETS" | jq -r '.assets[] | select(.name | endswith(".src.rpm")) | .browser_download_url' | head -1)
+          if [ -n "$SRPM_URL" ] && [ "$SRPM_URL" != "null" ]; then
+            curl -L -o flux-security.src.rpm "$SRPM_URL"
+            rpm2cpio flux-security.src.rpm | cpio -idmv '*.spec'
+            mv flux-security.spec flux-security/flux-security.spec.new
+          else
+            echo "No SRPM found, skipping"
+            exit 0
+          fi
+
+      - name: Update spec file
+        run: |
+          if [ -f flux-security/flux-security.spec.new ]; then
+            # Apply Fedora adaptations to the new spec
+            sed -i 's/^License:.*/License: LGPL-3.0-only/' flux-security/flux-security.spec.new
+            sed -i 's|^Source0:.*|Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz|' flux-security/flux-security.spec.new
+            sed -i 's|^Url:|URL:|' flux-security/flux-security.spec.new
+            sed -i '/^BuildRoot:/d' flux-security/flux-security.spec.new
+            sed -i '/^Group:/d' flux-security/flux-security.spec.new
+            sed -i '/^%clean/,/^$/d' flux-security/flux-security.spec.new
+            sed -i 's/%post -p \/sbin\/ldconfig/%ldconfig_scriptlets\n\n%post/' flux-security/flux-security.spec.new
+            sed -i '/^%postun -p/d' flux-security/flux-security.spec.new
+            sed -i 's/^%define/%global/' flux-security/flux-security.spec.new
+            mv flux-security/flux-security.spec.new flux-security/flux-security.spec
+          fi
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Update flux-security to ${{ needs.check-flux-security.outputs.new_version }}"
+          title: "Update flux-security to ${{ needs.check-flux-security.outputs.new_version }}"
+          body: |
+            Automated update of flux-security from ${{ needs.check-flux-security.outputs.current_version }} to ${{ needs.check-flux-security.outputs.new_version }}.
+
+            Release: https://github.com/flux-framework/flux-security/releases/tag/v${{ needs.check-flux-security.outputs.new_version }}
+
+            Please review the spec file changes and ensure Fedora compatibility.
+          branch: update-flux-security-${{ needs.check-flux-security.outputs.new_version }}
+          delete-branch: true
+
+  update-flux-core:
+    name: Update flux-core
+    needs: check-flux-core
+    if: needs.check-flux-core.outputs.new_version != ''
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: dnf install -y cpio curl jq
+
+      - name: Download new SRPM
+        run: |
+          VERSION="${{ needs.check-flux-core.outputs.new_version }}"
+          ASSETS=$(curl -s "https://api.github.com/repos/flux-framework/flux-core/releases/tags/v${VERSION}")
+          SRPM_URL=$(echo "$ASSETS" | jq -r '.assets[] | select(.name | endswith(".src.rpm")) | .browser_download_url' | head -1)
+          if [ -n "$SRPM_URL" ] && [ "$SRPM_URL" != "null" ]; then
+            curl -L -o flux-core.src.rpm "$SRPM_URL"
+            rpm2cpio flux-core.src.rpm | cpio -idmv '*.spec'
+            mv flux-core.spec flux-core/flux-core.spec.new
+          else
+            echo "No SRPM found, skipping"
+            exit 0
+          fi
+
+      - name: Update spec file
+        run: |
+          if [ -f flux-core/flux-core.spec.new ]; then
+            # Apply Fedora adaptations to the new spec
+            sed -i 's/^License:.*/License: LGPL-3.0-only/' flux-core/flux-core.spec.new
+            sed -i 's|^Source0:.*|Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz|' flux-core/flux-core.spec.new
+            sed -i 's|^Url:|URL:|' flux-core/flux-core.spec.new
+            sed -i '/^BuildRoot:/d' flux-core/flux-core.spec.new
+            sed -i '/^Group:/d' flux-core/flux-core.spec.new
+            sed -i '/^%clean/,/^$/d' flux-core/flux-core.spec.new
+            sed -i 's/%post -p \/sbin\/ldconfig/%ldconfig_scriptlets\n\n%post/' flux-core/flux-core.spec.new
+            sed -i '/^%postun -p/d' flux-core/flux-core.spec.new
+            sed -i 's/^%define/%global/' flux-core/flux-core.spec.new
+            sed -i '/^Patch0:/d' flux-core/flux-core.spec.new  # Remove LLNL-specific patches
+            sed -i '/0%{?bl6}/,/%endif/d' flux-core/flux-core.spec.new  # Remove LLNL conditionals
+            sed -i '/python3\.\(9\|11\|12\)/d' flux-core/flux-core.spec.new  # Remove versioned python
+            mv flux-core/flux-core.spec.new flux-core/flux-core.spec
+          fi
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Update flux-core to ${{ needs.check-flux-core.outputs.new_version }}"
+          title: "Update flux-core to ${{ needs.check-flux-core.outputs.new_version }}"
+          body: |
+            Automated update of flux-core from ${{ needs.check-flux-core.outputs.current_version }} to ${{ needs.check-flux-core.outputs.new_version }}.
+
+            Release: https://github.com/flux-framework/flux-core/releases/tag/v${{ needs.check-flux-core.outputs.new_version }}
+
+            Please review the spec file changes and ensure Fedora compatibility.
+          branch: update-flux-core-${{ needs.check-flux-core.outputs.new_version }}
+          delete-branch: true
+

@@ -1,0 +1,4 @@
+# RPM build artifacts
+*.rpm
+*.src.rpm
+rpmbuild/

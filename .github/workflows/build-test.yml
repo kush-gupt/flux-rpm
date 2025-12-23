@@ -1,0 +1,131 @@
+name: Build and Test RPMs
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint spec files
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install rpmlint
+        run: dnf install -y rpmlint
+
+      - name: Run rpmlint
+        run: |
+          rpmlint flux-security/flux-security.spec || true
+          rpmlint flux-core/flux-core.spec || true
+
+  build-srpm:
+    name: Build SRPMs
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: dnf install -y rpm-build rpmdevtools wget
+
+      - name: Setup rpmbuild tree
+        run: rpmdev-setuptree
+
+      - name: Get versions from spec files
+        id: versions
+        run: |
+          SECURITY_VERSION=$(grep '^Version:' flux-security/flux-security.spec | awk '{print $2}')
+          CORE_VERSION=$(grep '^Version:' flux-core/flux-core.spec | awk '{print $2}')
+          echo "security=$SECURITY_VERSION" >> $GITHUB_OUTPUT
+          echo "core=$CORE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Download sources
+        run: |
+          wget -O ~/rpmbuild/SOURCES/flux-security-${{ steps.versions.outputs.security }}.tar.gz \
+            https://github.com/flux-framework/flux-security/releases/download/v${{ steps.versions.outputs.security }}/flux-security-${{ steps.versions.outputs.security }}.tar.gz
+          wget -O ~/rpmbuild/SOURCES/flux-core-${{ steps.versions.outputs.core }}.tar.gz \
+            https://github.com/flux-framework/flux-core/releases/download/v${{ steps.versions.outputs.core }}/flux-core-${{ steps.versions.outputs.core }}.tar.gz
+
+      - name: Build SRPMs
+        run: |
+          cp flux-security/flux-security.spec ~/rpmbuild/SPECS/
+          cp flux-core/flux-core.spec ~/rpmbuild/SPECS/
+          rpmbuild -bs ~/rpmbuild/SPECS/flux-security.spec
+          rpmbuild -bs ~/rpmbuild/SPECS/flux-core.spec
+
+      - name: Upload SRPMs
+        uses: actions/upload-artifact@v4
+        with:
+          name: srpms
+          path: ~/rpmbuild/SRPMS/*.src.rpm
+
+  mock-build:
+    name: Mock build (${{ matrix.release }})
+    runs-on: ubuntu-latest
+    needs: build-srpm
+    strategy:
+      fail-fast: false
+      matrix:
+        release:
+          - fedora-40-x86_64
+          - fedora-41-x86_64
+          - fedora-42-x86_64
+          - fedora-43-x86_64
+          - fedora-rawhide-x86_64
+          - epel-9-x86_64
+          - epel-10-x86_64
+    container:
+      image: fedora:latest
+      options: --privileged
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mock
+        run: |
+          dnf install -y mock
+          usermod -a -G mock root
+
+      - name: Download SRPMs
+        uses: actions/download-artifact@v4
+        with:
+          name: srpms
+          path: ./srpms
+
+      - name: Initialize mock
+        run: mock -r ${{ matrix.release }} --init
+
+      - name: Build flux-security
+        run: mock -r ${{ matrix.release }} --rebuild srpms/flux-security-*.src.rpm --resultdir=results-security
+        continue-on-error: true
+
+      - name: Install flux-security in mock
+        if: success()
+        run: mock -r ${{ matrix.release }} --install results-security/flux-security-*.rpm results-security/flux-security-devel-*.rpm
+        continue-on-error: true
+
+      - name: Build flux-core
+        run: mock -r ${{ matrix.release }} --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core
+        continue-on-error: true
+
+      - name: Upload build results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rpms-${{ matrix.release }}
+          path: |
+            results-security/*.rpm
+            results-core/*.rpm
+            results-security/*.log
+            results-core/*.log
+
+      - name: Cleanup mock
+        if: always()
+        run: mock -r ${{ matrix.release }} --clean
