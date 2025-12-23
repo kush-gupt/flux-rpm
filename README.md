@@ -16,8 +16,8 @@ Heavily assisted through Cursor IDE with Claude 4.5 Opus, but all code is review
 ## Build Status
 
 Testing against:
-- **Fedora**: 40, 41, 42, 43, Rawhide
-- **EPEL**: 9, 10
+- **Fedora**: 41, 42, Rawhide
+- **EPEL**: 9, 10 (CentOS Stream)
 
 ## Quick Start
 
