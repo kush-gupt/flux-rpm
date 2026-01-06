@@ -24,7 +24,12 @@ Testing against:
 ### Install from COPR
 
 ```bash
-sudo dnf copr enable YOUR_USERNAME/flux-framework
+# Install flux-security first (dependency)
+sudo dnf copr enable Kushgupta/flux-security
+sudo dnf install flux-security flux-security-devel
+
+# Then install flux-core
+sudo dnf copr enable Kushgupta/flux-core
 sudo dnf install flux-core
 ```
 
@@ -74,6 +79,8 @@ The update script:
 
 ```
 flux-rpm/
+├── .copr/
+│   └── Makefile            # COPR native SCM build script
 ├── flux-core/
 │   └── flux-core.spec
 ├── flux-security/
@@ -82,15 +89,47 @@ flux-rpm/
 │   ├── build-srpm.sh
 │   └── update-specs.sh
 └── .github/workflows/
-    ├── build-test.yml
-    └── check-updates.yml
+    ├── build-test.yml      # CI: lint, mock builds, tests
+    └── check-updates.yml   # Daily upstream version checks
 ```
 
 ## COPR Setup
 
-1. Create project at [COPR](https://copr.fedorainfracloud.org/)
-2. Upload SRPMs or configure SCM source
-3. Enable webhook for automatic builds
+This repository uses **COPR's native SCM integration** to automatically build packages directly from GitHub - no GitHub Actions or API tokens needed!
+
+### Projects
+
+- **flux-security**: https://copr.fedorainfracloud.org/coprs/kushgupta/flux-security/
+- **flux-core**: https://copr.fedorainfracloud.org/coprs/kushgupta/flux-core/
+
+### How It Works
+
+1. COPR pulls directly from this GitHub repository
+2. The `.copr/Makefile` downloads upstream tarballs and builds SRPMs
+3. COPR builds RPMs for all configured chroots
+4. Packages with "auto-rebuild" enabled will rebuild on git push
+
+### Triggering Builds
+
+**Automatic** (if auto-rebuild is enabled):
+- Push to `main` branch triggers automatic rebuild
+
+**Manual**:
+1. Go to the COPR project → Packages
+2. Click "Rebuild" next to the package
+
+### Manual COPR Build (Alternative)
+
+You can also manually upload SRPMs:
+
+```bash
+# Build SRPMs locally
+./scripts/build-srpm.sh all
+
+# Upload to COPR
+copr-cli build kushgupta/flux-security ~/rpmbuild/SRPMS/flux-security-*.src.rpm
+copr-cli build kushgupta/flux-core ~/rpmbuild/SRPMS/flux-core-*.src.rpm
+```
 
 ## EPEL Considerations
 
