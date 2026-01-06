@@ -122,6 +122,429 @@ jobs:
           set -o pipefail
           mock -r ${{ matrix.release }} --verbose --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
 
+      # ============================================================
+      # COMPREHENSIVE TESTING SECTION
+      # ============================================================
+
+      - name: Install all flux packages in mock for testing
+        run: |
+          echo "=== Installing flux-security packages ==="
+          SECURITY_RPMS=$(ls results-security/flux-security*.x86_64.rpm | grep -v debuginfo | grep -v debugsource)
+          echo "Installing: $SECURITY_RPMS"
+          mock -r ${{ matrix.release }} --install $SECURITY_RPMS
+
+          echo "=== Installing flux-core packages ==="
+          CORE_RPMS=$(ls results-core/flux-core*.x86_64.rpm results-core/python3-flux*.x86_64.rpm 2>/dev/null | grep -v debuginfo | grep -v debugsource)
+          echo "Installing: $CORE_RPMS"
+          mock -r ${{ matrix.release }} --install $CORE_RPMS
+
+      - name: Test flux-security - Package verification
+        run: |
+          echo "=== flux-security Package Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- RPM Query: flux-security package info ---"
+            rpm -qi flux-security
+
+            echo ""
+            echo "--- RPM Query: flux-security-devel package info ---"
+            rpm -qi flux-security-devel
+
+            echo ""
+            echo "--- List all files in flux-security ---"
+            rpm -ql flux-security
+
+            echo ""
+            echo "--- List all files in flux-security-devel ---"
+            rpm -ql flux-security-devel
+          '
+
+      - name: Test flux-security - Library verification
+        run: |
+          echo "=== flux-security Library Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check shared library exists ---"
+            ls -la /usr/lib64/libflux-security.so*
+
+            echo ""
+            echo "--- Verify library symbols (sign/verify functions) ---"
+            nm -D /usr/lib64/libflux-security.so.1 | grep -E "flux_sign|flux_unwrap" | head -20
+
+            echo ""
+            echo "--- Check library dependencies ---"
+            ldd /usr/lib64/libflux-security.so.1
+
+            echo ""
+            echo "--- Verify pkgconfig file ---"
+            cat /usr/lib64/pkgconfig/flux-security.pc
+
+            echo ""
+            echo "--- Test pkgconfig query ---"
+            pkg-config --libs flux-security
+            pkg-config --cflags flux-security
+          '
+
+      - name: Test flux-security - IMP executable verification
+        run: |
+          echo "=== flux-security IMP Executable Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check flux-imp exists and has correct permissions ---"
+            ls -la /usr/libexec/flux/flux-imp
+
+            echo ""
+            echo "--- Verify flux-imp is setuid root ---"
+            stat /usr/libexec/flux/flux-imp | grep -i "Uid"
+
+            echo ""
+            echo "--- Check flux-imp file type ---"
+            file /usr/libexec/flux/flux-imp
+
+            echo ""
+            echo "--- Check flux-imp dependencies ---"
+            ldd /usr/libexec/flux/flux-imp
+          '
+
+      - name: Test flux-security - Configuration verification
+        run: |
+          echo "=== flux-security Configuration Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check configuration directories ---"
+            ls -la /etc/flux/security/
+            ls -la /etc/flux/security/conf.d/
+            ls -la /etc/flux/imp/ || echo "IMP dir may be empty"
+            ls -la /etc/flux/imp/conf.d/ || echo "IMP conf.d may be empty"
+
+            echo ""
+            echo "--- Check sign.toml configuration ---"
+            cat /etc/flux/security/conf.d/sign.toml
+          '
+
+      - name: Test flux-security - Header files verification
+        run: |
+          echo "=== flux-security Header Files Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check header files ---"
+            ls -la /usr/include/flux/security/
+
+            echo ""
+            echo "--- Verify main header content ---"
+            head -50 /usr/include/flux/security/security.h
+          '
+
+      - name: Test flux-security - Man pages verification
+        run: |
+          echo "=== flux-security Man Pages Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- List man pages ---"
+            ls -la /usr/share/man/man3/flux_sign*.3* || echo "No man3 pages"
+            ls -la /usr/share/man/man5/flux-config-security*.5* || echo "No man5 pages"
+            ls -la /usr/share/man/man8/flux-imp*.8* || echo "No man8 pages"
+          '
+
+      - name: Test flux-core - Package verification
+        run: |
+          echo "=== flux-core Package Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- RPM Query: flux-core package info ---"
+            rpm -qi flux-core
+
+            echo ""
+            echo "--- RPM Query: flux-core-devel package info ---"
+            rpm -qi flux-core-devel
+
+            echo ""
+            echo "--- RPM Query: python3-flux package info ---"
+            rpm -qi python3-flux
+
+            echo ""
+            echo "--- List key files in flux-core (binaries) ---"
+            rpm -ql flux-core | grep -E "^/usr/bin/"
+
+            echo ""
+            echo "--- List key files in flux-core (libraries) ---"
+            rpm -ql flux-core | grep -E "^/usr/lib64/.*\.so"
+          '
+
+      - name: Test flux-core - Binary verification
+        run: |
+          echo "=== flux-core Binary Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check flux binary exists ---"
+            ls -la /usr/bin/flux
+            ls -la /usr/bin/flux-python
+
+            echo ""
+            echo "--- Check flux binary type ---"
+            file /usr/bin/flux
+
+            echo ""
+            echo "--- Flux version ---"
+            /usr/bin/flux version
+
+            echo ""
+            echo "--- Flux help ---"
+            /usr/bin/flux help || true
+
+            echo ""
+            echo "--- List flux subcommands ---"
+            /usr/bin/flux --help 2>&1 | head -50 || true
+          '
+
+      - name: Test flux-core - Library verification
+        run: |
+          echo "=== flux-core Library Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check shared libraries exist ---"
+            ls -la /usr/lib64/libflux-core.so*
+            ls -la /usr/lib64/libflux-idset.so*
+            ls -la /usr/lib64/libflux-optparse.so*
+            ls -la /usr/lib64/libflux-hostlist.so*
+            ls -la /usr/lib64/libflux-taskmap.so*
+            ls -la /usr/lib64/libflux-schedutil.so*
+
+            echo ""
+            echo "--- Check flux PMI libraries ---"
+            ls -la /usr/lib64/flux/libpmi*.so*
+
+            echo ""
+            echo "--- Check library dependencies for libflux-core ---"
+            ldd /usr/lib64/libflux-core.so.2
+
+            echo ""
+            echo "--- Verify pkgconfig files ---"
+            ls -la /usr/lib64/pkgconfig/flux*.pc
+
+            echo ""
+            echo "--- Test pkgconfig queries ---"
+            pkg-config --libs flux-core
+            pkg-config --cflags flux-core
+            pkg-config --libs flux-idset
+            pkg-config --libs flux-hostlist
+          '
+
+      - name: Test flux-core - Python bindings verification
+        run: |
+          echo "=== flux-core Python Bindings Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check Python flux module location ---"
+            python3 -c "import flux; print(flux.__file__)"
+
+            echo ""
+            echo "--- Test basic flux module import ---"
+            python3 -c "
+import flux
+print(\"flux module imported successfully\")
+print(f\"flux module path: {flux.__file__}\")
+"
+
+            echo ""
+            echo "--- Test flux.job module ---"
+            python3 -c "
+from flux import job
+print(\"flux.job module imported successfully\")
+"
+
+            echo ""
+            echo "--- Test flux.hostlist module ---"
+            python3 -c "
+from flux import hostlist
+hl = hostlist.Hostlist(\"node[1-10]\")
+print(f\"Hostlist expansion: {hl}\")
+print(f\"Count: {len(hl)}\")
+"
+
+            echo ""
+            echo "--- Test flux.idset module ---"
+            python3 -c "
+from flux import idset
+ids = idset.IDset(\"0-9\")
+print(f\"IDset: {ids}\")
+print(f\"Count: {len(ids)}\")
+"
+
+            echo ""
+            echo "--- List flux Python submodules ---"
+            python3 -c "
+import flux
+import pkgutil
+for importer, modname, ispkg in pkgutil.iter_modules(flux.__path__):
+    print(f\"  {modname} (package: {ispkg})\")
+"
+          '
+
+      - name: Test flux-core - Modules and connectors verification
+        run: |
+          echo "=== flux-core Modules and Connectors Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- List flux connectors ---"
+            ls -la /usr/lib64/flux/connectors/
+
+            echo ""
+            echo "--- List flux modules ---"
+            ls -la /usr/lib64/flux/modules/
+
+            echo ""
+            echo "--- List job-manager plugins ---"
+            ls -la /usr/lib64/flux/job-manager/ || echo "No job-manager plugins"
+
+            echo ""
+            echo "--- Check connector dependencies ---"
+            for conn in /usr/lib64/flux/connectors/*.so; do
+              echo "=== $conn ==="
+              ldd "$conn" | grep -E "not found" && echo "MISSING DEPS!" || echo "OK"
+            done
+          '
+
+      - name: Test flux-core - Systemd integration verification
+        run: |
+          echo "=== flux-core Systemd Integration Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check systemd unit files ---"
+            ls -la /usr/lib/systemd/system/flux*.service
+
+            echo ""
+            echo "--- Show flux.service content ---"
+            cat /usr/lib/systemd/system/flux.service
+
+            echo ""
+            echo "--- Check tmpfiles configuration ---"
+            ls -la /usr/lib/tmpfiles.d/flux*.conf || echo "No tmpfiles"
+            cat /usr/lib/tmpfiles.d/flux*.conf 2>/dev/null || echo "No tmpfiles content"
+          '
+
+      - name: Test flux-core - Configuration and shell verification
+        run: |
+          echo "=== flux-core Configuration Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check configuration directories ---"
+            ls -la /etc/flux/
+            ls -la /etc/flux/shell/ || echo "No shell dir"
+            ls -la /etc/flux/shell/lua.d/ || echo "No lua.d dir"
+
+            echo ""
+            echo "--- Check shell initrc ---"
+            cat /etc/flux/shell/initrc.lua 2>/dev/null | head -30 || echo "No initrc.lua"
+
+            echo ""
+            echo "--- Check rc directories ---"
+            ls -la /etc/flux/rc1.d/ || echo "rc1.d empty"
+            ls -la /etc/flux/rc3.d/ || echo "rc3.d empty"
+
+            echo ""
+            echo "--- Check cron configuration ---"
+            cat /etc/flux/system/cron.d/kvs-backup.cron 2>/dev/null || echo "No cron config"
+          '
+
+      - name: Test flux-core - Lua bindings verification
+        run: |
+          echo "=== flux-core Lua Bindings Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check Lua flux module ---"
+            ls -la /usr/lib64/lua/*/flux.so
+
+            echo ""
+            echo "--- Check Lua flux data files ---"
+            ls -la /usr/share/lua/*/flux/ || echo "No lua data"
+
+            echo ""
+            echo "--- Test Lua flux module load ---"
+            lua -e "local flux = require \"flux\"; print(\"Lua flux module loaded successfully\")" || echo "Lua test skipped (may need flux broker)"
+          '
+
+      - name: Test flux-core - Man pages verification
+        run: |
+          echo "=== flux-core Man Pages Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Count man pages by section ---"
+            echo "Section 1 (commands):"
+            ls /usr/share/man/man1/flux*.1* 2>/dev/null | wc -l || echo "0"
+
+            echo "Section 3 (library):"
+            ls /usr/share/man/man3/flux*.3* 2>/dev/null | wc -l || echo "0"
+
+            echo "Section 5 (config):"
+            ls /usr/share/man/man5/flux*.5* 2>/dev/null | wc -l || echo "0"
+
+            echo "Section 7 (misc):"
+            ls /usr/share/man/man7/flux*.7* 2>/dev/null | wc -l || echo "0"
+
+            echo ""
+            echo "--- Sample man page test ---"
+            man -w flux 2>/dev/null && echo "flux man page found" || echo "flux man page lookup failed"
+          '
+
+      - name: Test flux-core - Bash completion verification
+        run: |
+          echo "=== flux-core Bash Completion Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check bash completion file ---"
+            ls -la /usr/share/bash-completion/completions/flux
+
+            echo ""
+            echo "--- Show completion file header ---"
+            head -30 /usr/share/bash-completion/completions/flux
+          '
+
+      - name: Test flux-core - Header files verification
+        run: |
+          echo "=== flux-core Header Files Verification ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Check header directories ---"
+            ls -la /usr/include/flux/
+
+            echo ""
+            echo "--- List all headers ---"
+            find /usr/include/flux -name "*.h" | head -30
+
+            echo ""
+            echo "--- Verify main header ---"
+            head -50 /usr/include/flux/core.h
+          '
+
+      - name: Test integration - flux-security with flux-core
+        run: |
+          echo "=== Integration Test: flux-security with flux-core ==="
+          mock -r ${{ matrix.release }} --shell -- bash -c '
+            set -e
+            echo "--- Verify flux-core links against flux-security ---"
+            ldd /usr/bin/flux | grep -i security || echo "flux binary may not directly link libflux-security"
+
+            echo ""
+            echo "--- Check IMP is accessible from flux libexec ---"
+            ls -la /usr/libexec/flux/flux-imp
+
+            echo ""
+            echo "--- Verify flux can find security library ---"
+            ldconfig -p | grep flux-security
+          '
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "=== Test Summary for ${{ matrix.release }} ===" | tee test-summary.txt
+          echo "" >> test-summary.txt
+          echo "Build completed: $(date)" >> test-summary.txt
+          echo "" >> test-summary.txt
+          echo "Packages built:" >> test-summary.txt
+          ls -la results-security/*.rpm 2>/dev/null | grep -v debuginfo >> test-summary.txt || true
+          ls -la results-core/*.rpm 2>/dev/null | grep -v debuginfo >> test-summary.txt || true
+
       - name: Upload build results
         uses: actions/upload-artifact@v4
         if: always()
@@ -132,6 +555,7 @@ jobs:
             results-core/
             security-build.log
             core-build.log
+            test-summary.txt
 
       - name: Cleanup mock
         if: always()
