@@ -82,6 +82,9 @@ BuildRequires: make
 BuildRequires: gcc
 BuildRequires: gcc-c++
 
+# Required for en_US.UTF-8 locale during documentation build
+BuildRequires: glibc-langpack-en
+
 %description
 Flux Framework is a suite of projects, tools and libraries which may
 be used to build site-custom resource managers at High Performance
