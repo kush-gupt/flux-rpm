@@ -108,7 +108,11 @@ jobs:
 
       - name: Install flux-security in mock
         run: |
-          mock -r ${{ matrix.release }} --install results-security/flux-security-*.x86_64.rpm results-security/flux-security-devel-*.x86_64.rpm
+          # Find exact RPMs to install (exclude debuginfo/debugsource)
+          SECURITY_RPM=$(ls results-security/flux-security-[0-9]*.x86_64.rpm | head -1)
+          SECURITY_DEVEL_RPM=$(ls results-security/flux-security-devel-*.x86_64.rpm | head -1)
+          echo "Installing: $SECURITY_RPM $SECURITY_DEVEL_RPM"
+          mock -r ${{ matrix.release }} --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
 
       - name: Build flux-core
         run: |
