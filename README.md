@@ -17,7 +17,7 @@ Heavily assisted through Cursor IDE with Claude 4.5 Opus, but all code is review
 
 Testing against:
 - **Fedora**: 41, 42, Rawhide
-- **EPEL**: 9, 10 (CentOS Stream)
+- **EPEL**: 9 (CentOS Stream)
 
 ## Quick Start
 

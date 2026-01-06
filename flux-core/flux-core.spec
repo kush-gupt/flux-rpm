@@ -57,12 +57,21 @@ Requires: python3-pyyaml
 Requires: python3-ply
 
 BuildRequires: python3
-BuildRequires: python3-pip
 BuildRequires: python3-devel
 BuildRequires: python3-cffi
 BuildRequires: python3-pyyaml
 BuildRequires: python3-ply
 BuildRequires: python3-setuptools
+BuildRequires: python3-sphinx
+BuildRequires: python3-sphinx_rtd_theme
+BuildRequires: python3-docutils
+
+BuildRequires: autoconf
+BuildRequires: automake
+BuildRequires: libtool
+BuildRequires: make
+BuildRequires: gcc
+BuildRequires: gcc-c++
 
 %description
 Flux Framework is a suite of projects, tools and libraries which may
@@ -94,12 +103,8 @@ Python 3 bindings for flux-core resource manager framework.
 %prep
 %autosetup -n %{name}-%{version} -p1
 
-# Need to install sphinx deps with pip3 so manpages are built correctly
-pip3 install --user -r doc/requirements.txt
-
 %build
 export LC_ALL=en_US.UTF-8
-export PATH=$HOME/.local/bin:$PATH
 
 %configure \
     --with-systemdsystemunitdir=%{_unitdir} \

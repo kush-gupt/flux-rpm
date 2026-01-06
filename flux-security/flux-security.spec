@@ -12,7 +12,14 @@ BuildRequires: pkgconfig(jansson) >= 2.6
 BuildRequires: munge-devel
 BuildRequires: pam-devel
 BuildRequires: libuuid-devel
-BuildRequires: python3-pip
+BuildRequires: python3-sphinx
+BuildRequires: python3-sphinx_rtd_theme
+BuildRequires: python3-docutils
+BuildRequires: autoconf
+BuildRequires: automake
+BuildRequires: libtool
+BuildRequires: make
+BuildRequires: gcc
 
 %description
 Flux Framework is a suite of projects, tools and libraries which may
@@ -32,11 +39,7 @@ Development files for %{name}.
 %prep
 %autosetup -n %{name}-%{version} -p1
 
-# Need to install sphinx deps with pip3 so manpages are built correctly
-pip3 install --user -r doc/requirements.txt
-
 %build
-export PATH=$HOME/.local/bin:$PATH
 
 %configure \
 	--enable-pam \

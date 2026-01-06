@@ -79,7 +79,6 @@ jobs:
           - fedora-42-x86_64
           - fedora-rawhide-x86_64
           - centos-stream+epel-9-x86_64
-          - centos-stream+epel-next-10-x86_64
     container:
       image: fedora:latest
       options: --privileged
