@@ -340,45 +340,23 @@ jobs:
 
             echo ""
             echo "--- Test basic flux module import ---"
-            python3 -c "
-import flux
-print(\"flux module imported successfully\")
-print(f\"flux module path: {flux.__file__}\")
-"
+            python3 -c "import flux; print(\"flux module imported successfully\"); print(\"flux module path:\", flux.__file__)"
 
             echo ""
             echo "--- Test flux.job module ---"
-            python3 -c "
-from flux import job
-print(\"flux.job module imported successfully\")
-"
+            python3 -c "from flux import job; print(\"flux.job module imported successfully\")"
 
             echo ""
             echo "--- Test flux.hostlist module ---"
-            python3 -c "
-from flux import hostlist
-hl = hostlist.Hostlist(\"node[1-10]\")
-print(f\"Hostlist expansion: {hl}\")
-print(f\"Count: {len(hl)}\")
-"
+            python3 -c "from flux import hostlist; hl = hostlist.Hostlist(\"node[1-10]\"); print(\"Hostlist expansion:\", hl); print(\"Count:\", len(hl))"
 
             echo ""
             echo "--- Test flux.idset module ---"
-            python3 -c "
-from flux import idset
-ids = idset.IDset(\"0-9\")
-print(f\"IDset: {ids}\")
-print(f\"Count: {len(ids)}\")
-"
+            python3 -c "from flux import idset; ids = idset.IDset(\"0-9\"); print(\"IDset:\", ids); print(\"Count:\", len(ids))"
 
             echo ""
             echo "--- List flux Python submodules ---"
-            python3 -c "
-import flux
-import pkgutil
-for importer, modname, ispkg in pkgutil.iter_modules(flux.__path__):
-    print(f\"  {modname} (package: {ispkg})\")
-"
+            python3 -c "import flux; import pkgutil; [print(\"  \" + modname + \" (package: \" + str(ispkg) + \")\") for importer, modname, ispkg in pkgutil.iter_modules(flux.__path__)]"
           '
 
       - name: Test flux-core - Modules and connectors verification
