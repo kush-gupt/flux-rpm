@@ -120,7 +120,7 @@ jobs:
       - name: Build flux-core
         run: |
           set -o pipefail
-          mock -r ${{ matrix.release }} --verbose --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
+          mock -r ${{ matrix.release }} --verbose --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
 
       - name: Upload build results
         uses: actions/upload-artifact@v4
