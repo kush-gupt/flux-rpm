@@ -96,21 +96,23 @@ jobs:
           name: srpms
           path: ./srpms
 
+      - name: List SRPMs
+        run: ls -la ./srpms/
+
       - name: Initialize mock
         run: mock -r ${{ matrix.release }} --init
 
       - name: Build flux-security
-        run: mock -r ${{ matrix.release }} --rebuild srpms/flux-security-*.src.rpm --resultdir=results-security
-        continue-on-error: true
+        run: |
+          mock -r ${{ matrix.release }} --verbose --rebuild srpms/flux-security-*.src.rpm --resultdir=results-security 2>&1 | tee security-build.log
 
       - name: Install flux-security in mock
-        if: success()
-        run: mock -r ${{ matrix.release }} --install results-security/flux-security-*.rpm results-security/flux-security-devel-*.rpm
-        continue-on-error: true
+        run: |
+          mock -r ${{ matrix.release }} --install results-security/flux-security-*.x86_64.rpm results-security/flux-security-devel-*.x86_64.rpm
 
       - name: Build flux-core
-        run: mock -r ${{ matrix.release }} --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core
-        continue-on-error: true
+        run: |
+          mock -r ${{ matrix.release }} --verbose --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
 
       - name: Upload build results
         uses: actions/upload-artifact@v4
@@ -118,10 +120,10 @@ jobs:
         with:
           name: rpms-${{ matrix.release }}
           path: |
-            results-security/*.rpm
-            results-core/*.rpm
-            results-security/*.log
-            results-core/*.log
+            results-security/
+            results-core/
+            security-build.log
+            core-build.log
 
       - name: Cleanup mock
         if: always()
