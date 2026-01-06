@@ -98,7 +98,7 @@ For EPEL 8/9/10, additional conditionals may be needed for dependency difference
 
 ## License
 
-This packaging: MIT | Flux Framework: LGPL-3.0
+Same as Flux Framework: LGPL-3.0
 
 ## Links
 

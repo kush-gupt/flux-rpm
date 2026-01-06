@@ -141,7 +141,7 @@ if /usr/bin/systemctl is-active --quiet flux.service 2>/dev/null; then
 fi
 
 %files
-%license COPYING
+%license LICENSE
 %doc README.md NEWS.md
 
 # commands + other executables

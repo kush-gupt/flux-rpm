@@ -57,7 +57,7 @@ mkdir -p %{buildroot}%{_sysconfdir}/flux/imp/conf.d
 %ldconfig_scriptlets
 
 %files
-%license COPYING
+%license LICENSE
 %doc README.md NEWS.md
 
 # IMP executable
