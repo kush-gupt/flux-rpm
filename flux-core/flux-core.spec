@@ -32,7 +32,11 @@ BuildRequires: systemd-rpm-macros
 BuildRequires: chrpath
 
 # requirements specifically for 'make check'
-BuildRequires: aspell aspell-en
+BuildRequires: aspell
+# aspell-en is not available in EPEL 10
+%if 0%{?fedora} || 0%{?rhel} < 10
+BuildRequires: aspell-en
+%endif
 BuildRequires: hostname
 BuildRequires: man-db
 BuildRequires: jq

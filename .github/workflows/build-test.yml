@@ -106,6 +106,7 @@ jobs:
 
       - name: Build flux-security
         run: |
+          set -o pipefail
           mock -r ${{ matrix.release }} --verbose --rebuild srpms/flux-security-*.src.rpm --resultdir=results-security 2>&1 | tee security-build.log
 
       - name: Install flux-security in mock
@@ -118,6 +119,7 @@ jobs:
 
       - name: Build flux-core
         run: |
+          set -o pipefail
           mock -r ${{ matrix.release }} --verbose --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
 
       - name: Upload build results
