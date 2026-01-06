@@ -9,6 +9,11 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 # Redhat only provides /usr/bin/false, but tests look for /bin/false
 %global __requires_exclude /bin/false
 
+# Disable strict-aliasing errors - upstream uses bundled libev which has
+# known strict-aliasing violations. Upstream already uses -Wno-strict-aliasing
+# in their build but Fedora's optflags may override this with -Werror variants.
+%global optflags %{optflags} -Wno-error=strict-aliasing
+
 BuildRequires: flux-security-devel >= 0.14
 
 BuildRequires: pkgconfig(libzmq) >= 4.1.4
