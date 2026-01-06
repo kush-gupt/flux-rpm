@@ -1,0 +1,11 @@
+# The flux-imp binary is intentionally setuid root.
+# It is the Independent Minister of Privilege for the Flux resource manager,
+# designed to execute privileged operations on behalf of Flux.
+# See: https://flux-framework.readthedocs.io/projects/flux-security/
+addFilter("setuid-binary /usr/libexec/flux/flux-imp root 4755")
+addFilter("non-standard-executable-perm /usr/libexec/flux/flux-imp 4755")
+
+# The incorrect FSF address is in upstream autoconf-generated files.
+# This has been reported upstream but is not a functional issue.
+addFilter("incorrect-fsf-address")
+

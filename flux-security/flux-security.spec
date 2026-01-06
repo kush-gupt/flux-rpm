@@ -21,6 +21,9 @@ BuildRequires: libtool
 BuildRequires: make
 BuildRequires: gcc
 
+# Required for en_US.UTF-8 locale during build
+BuildRequires: glibc-langpack-en
+
 %description
 Flux Framework is a suite of projects, tools and libraries which may
 be used to build site-custom resource managers at High Performance
@@ -40,10 +43,11 @@ Development files for %{name}.
 %autosetup -n %{name}-%{version} -p1
 
 %build
+export LC_ALL=en_US.UTF-8
 
 %configure \
-	--enable-pam \
-	--disable-static
+    --enable-pam \
+    --disable-static
 
 %make_build
 
@@ -54,13 +58,18 @@ find %{buildroot} -name '*.la' -delete
 # Create packaged directories
 mkdir -p %{buildroot}%{_sysconfdir}/flux/imp/conf.d
 
+%check
+export LC_ALL=en_US.UTF-8
+%make_build check
+
 %ldconfig_scriptlets
 
 %files
 %license LICENSE
 %doc README.md NEWS.md
 
-# IMP executable
+# IMP executable - must own parent directory
+%dir %{_libexecdir}/flux
 %attr(04755, root, root) %{_libexecdir}/flux/flux-imp
 
 # libs
