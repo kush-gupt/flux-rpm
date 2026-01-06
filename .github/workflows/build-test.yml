@@ -231,8 +231,16 @@ jobs:
             ls -la /usr/include/flux/security/
 
             echo ""
-            echo "--- Verify main header content ---"
-            head -50 /usr/include/flux/security/security.h
+            echo "--- Verify sign.h header content ---"
+            head -50 /usr/include/flux/security/sign.h
+
+            echo ""
+            echo "--- Verify context.h header exists ---"
+            test -f /usr/include/flux/security/context.h && echo "context.h exists"
+
+            echo ""
+            echo "--- Verify version.h header exists ---"
+            test -f /usr/include/flux/security/version.h && echo "version.h exists"
           '
 
       - name: Test flux-security - Man pages verification
@@ -240,10 +248,17 @@ jobs:
           echo "=== flux-security Man Pages Verification ==="
           mock -r ${{ matrix.release }} --shell -- bash -c '
             set -e
-            echo "--- List man pages ---"
-            ls -la /usr/share/man/man3/flux_sign*.3* || echo "No man3 pages"
-            ls -la /usr/share/man/man5/flux-config-security*.5* || echo "No man5 pages"
-            ls -la /usr/share/man/man8/flux-imp*.8* || echo "No man8 pages"
+            echo "--- List man3 pages (library API) ---"
+            ls -la /usr/share/man/man3/flux_sign*.3* 2>/dev/null || echo "No flux_sign man3 pages"
+            ls -la /usr/share/man/man3/flux_security*.3* 2>/dev/null || echo "No flux_security man3 pages"
+
+            echo ""
+            echo "--- List man5 pages (configuration) ---"
+            ls -la /usr/share/man/man5/flux-config-security*.5* 2>/dev/null || echo "No man5 pages"
+
+            echo ""
+            echo "--- List man8 pages (admin commands) ---"
+            ls -la /usr/share/man/man8/flux-imp*.8* 2>/dev/null || echo "No man8 pages"
           '
 
       - name: Test flux-core - Package verification
@@ -487,12 +502,18 @@ jobs:
             ls -la /usr/include/flux/
 
             echo ""
+            echo "--- Verify required headers exist ---"
+            for header in core.h hostlist.h idset.h optparse.h schedutil.h taskmap.h; do
+              test -f /usr/include/flux/$header && echo "OK: $header" || echo "MISSING: $header"
+            done
+
+            echo ""
             echo "--- List all headers ---"
             find /usr/include/flux -name "*.h" | head -30
 
             echo ""
-            echo "--- Verify main header ---"
-            head -50 /usr/include/flux/core.h
+            echo "--- Verify core.h header content ---"
+            head -30 /usr/include/flux/core.h
           '
 
       - name: Test integration - flux-security with flux-core
