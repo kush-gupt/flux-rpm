@@ -8,13 +8,10 @@ on:
   workflow_dispatch:
 
 env:
-  # Use pre-built container for faster builds
   BUILDER_IMAGE: ghcr.io/${{ github.repository }}/flux-rpm-builder:latest
 
 jobs:
-  # ============================================================
-  # STAGE 1: Lint spec files (parallel)
-  # ============================================================
+  # Lint runs in parallel with builds (non-blocking)
   lint:
     name: Lint spec files
     runs-on: ubuntu-latest
@@ -22,514 +19,267 @@ jobs:
       image: fedora:latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install rpmlint
-        run: dnf install -y rpmlint
-
-      - name: Run rpmlint on flux-security
-        run: rpmlint flux-security/flux-security.spec || true
-
-      - name: Run rpmlint on flux-core
-        run: rpmlint flux-core/flux-core.spec || true
-
-  # ============================================================
-  # STAGE 2: Build SRPMs (parallel)
-  # ============================================================
-  build-srpm-security:
-    name: Build flux-security SRPM
-    runs-on: ubuntu-latest
-    needs: lint
-    container:
-      image: fedora:latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install build dependencies
-        run: dnf install -y rpm-build rpmdevtools wget
-
-      - name: Setup rpmbuild tree
-        run: rpmdev-setuptree
-
-      - name: Get version
-        id: version
+      - name: Install and run rpmlint
         run: |
-          VERSION=$(grep '^Version:' flux-security/flux-security.spec | awk '{print $2}')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          dnf install -y rpmlint
+          rpmlint flux-security/flux-security.spec || true
+          rpmlint flux-core/flux-core.spec || true
 
-      - name: Download source
-        run: |
-          wget -O ~/rpmbuild/SOURCES/flux-security-${{ steps.version.outputs.version }}.tar.gz \
-            https://github.com/flux-framework/flux-security/releases/download/v${{ steps.version.outputs.version }}/flux-security-${{ steps.version.outputs.version }}.tar.gz
-
-      - name: Copy spec and patches
-        run: |
-          cp flux-security/flux-security.spec ~/rpmbuild/SPECS/
-          cp flux-security/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
-
-      - name: Build SRPM
-        run: rpmbuild -bs ~/rpmbuild/SPECS/flux-security.spec
-
-      - name: Upload SRPM
-        uses: actions/upload-artifact@v4
-        with:
-          name: srpm-flux-security
-          path: ~/rpmbuild/SRPMS/*.src.rpm
-
-  build-srpm-core:
-    name: Build flux-core SRPM
-    runs-on: ubuntu-latest
-    needs: lint
-    container:
-      image: fedora:latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install build dependencies
-        run: dnf install -y rpm-build rpmdevtools wget
-
-      - name: Setup rpmbuild tree
-        run: rpmdev-setuptree
-
-      - name: Get version
-        id: version
-        run: |
-          VERSION=$(grep '^Version:' flux-core/flux-core.spec | awk '{print $2}')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Download source
-        run: |
-          wget -O ~/rpmbuild/SOURCES/flux-core-${{ steps.version.outputs.version }}.tar.gz \
-            https://github.com/flux-framework/flux-core/releases/download/v${{ steps.version.outputs.version }}/flux-core-${{ steps.version.outputs.version }}.tar.gz
-
-      - name: Copy spec and patches
-        run: |
-          cp flux-core/flux-core.spec ~/rpmbuild/SPECS/
-          cp flux-core/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
-
-      - name: Build SRPM
-        run: rpmbuild -bs ~/rpmbuild/SPECS/flux-core.spec
-
-      - name: Upload SRPM
-        uses: actions/upload-artifact@v4
-        with:
-          name: srpm-flux-core
-          path: ~/rpmbuild/SRPMS/*.src.rpm
-
-  # ============================================================
-  # STAGE 3: Check container availability
-  # ============================================================
+  # Check container availability (fast, parallel)
   check-container:
-    name: Check container availability
+    name: Check container
     runs-on: ubuntu-latest
     outputs:
-      image-available: ${{ steps.check.outputs.available }}
-      image-to-use: ${{ steps.check.outputs.image }}
+      image: ${{ steps.check.outputs.image }}
     steps:
-      - name: Check if builder image exists
-        id: check
+      - id: check
         run: |
           if docker manifest inspect ${{ env.BUILDER_IMAGE }} > /dev/null 2>&1; then
-            echo "available=true" >> $GITHUB_OUTPUT
             echo "image=${{ env.BUILDER_IMAGE }}" >> $GITHUB_OUTPUT
           else
-            echo "available=false" >> $GITHUB_OUTPUT
             echo "image=fedora:latest" >> $GITHUB_OUTPUT
           fi
 
-  # ============================================================
-  # STAGE 4: Mock builds - flux-security and flux-core in parallel
-  # flux-core uses COPR for flux-security-devel dependency
-  # ============================================================
-
-  # --- FLUX-SECURITY BUILDS (all distros in parallel) ---
-  mock-security-fedora-41:
-    name: flux-security (fedora-41)
+  # Build SRPMs in parallel (no lint dependency)
+  build-srpms:
+    name: Build SRPMs
     runs-on: ubuntu-latest
-    needs: [build-srpm-security, check-container]
     container:
-      image: ${{ needs.check-container.outputs.image-to-use }}
-      options: --privileged
+      image: fedora:latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install mock (if fallback)
-        if: needs.check-container.outputs.image-available != 'true'
-        run: dnf install -y mock && usermod -a -G mock root
+      - name: Build both SRPMs
+        run: |
+          dnf install -y rpm-build rpmdevtools wget
+          rpmdev-setuptree
+          
+          # Get versions
+          SEC_VER=$(grep '^Version:' flux-security/flux-security.spec | awk '{print $2}')
+          CORE_VER=$(grep '^Version:' flux-core/flux-core.spec | awk '{print $2}')
+          
+          # Download sources in parallel
+          wget -q -O ~/rpmbuild/SOURCES/flux-security-${SEC_VER}.tar.gz \
+            https://github.com/flux-framework/flux-security/releases/download/v${SEC_VER}/flux-security-${SEC_VER}.tar.gz &
+          wget -q -O ~/rpmbuild/SOURCES/flux-core-${CORE_VER}.tar.gz \
+            https://github.com/flux-framework/flux-core/releases/download/v${CORE_VER}/flux-core-${CORE_VER}.tar.gz &
+          wait
+          
+          # Copy specs and patches
+          cp flux-security/flux-security.spec ~/rpmbuild/SPECS/
+          cp flux-core/flux-core.spec ~/rpmbuild/SPECS/
+          cp flux-security/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
+          cp flux-core/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
+          
+          # Build SRPMs
+          rpmbuild -bs ~/rpmbuild/SPECS/flux-security.spec
+          rpmbuild -bs ~/rpmbuild/SPECS/flux-core.spec
+          
+          # Move to workspace for upload
+          mkdir -p srpms
+          mv ~/rpmbuild/SRPMS/*.src.rpm srpms/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: srpms
+          path: srpms/
+
+  # flux-security builds (all distros parallel)
+  mock-security-fedora-41:
+    name: security (f41)
+    runs-on: ubuntu-latest
+    needs: [build-srpms, check-container]
+    container:
+      image: ${{ needs.check-container.outputs.image }}
+      options: --privileged
+    steps:
       - uses: actions/download-artifact@v4
         with:
-          name: srpm-flux-security
+          name: srpms
           path: ./srpms
-      - name: Build flux-security
+      - name: Build
         run: |
-          mock -r fedora-41-x86_64 --init
           mock -r fedora-41-x86_64 --rebuild srpms/flux-security-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
-          name: rpms-flux-security-fedora-41-x86_64
+          name: rpms-security-f41
           path: results/
-      - name: Cleanup
-        if: always()
+      - if: always()
         run: mock -r fedora-41-x86_64 --clean
 
   mock-security-fedora-42:
-    name: flux-security (fedora-42)
+    name: security (f42)
     runs-on: ubuntu-latest
-    needs: [build-srpm-security, check-container]
+    needs: [build-srpms, check-container]
     container:
-      image: ${{ needs.check-container.outputs.image-to-use }}
+      image: ${{ needs.check-container.outputs.image }}
       options: --privileged
     steps:
-      - uses: actions/checkout@v4
-      - name: Install mock (if fallback)
-        if: needs.check-container.outputs.image-available != 'true'
-        run: dnf install -y mock && usermod -a -G mock root
       - uses: actions/download-artifact@v4
         with:
-          name: srpm-flux-security
+          name: srpms
           path: ./srpms
-      - name: Build flux-security
+      - name: Build
         run: |
-          mock -r fedora-42-x86_64 --init
           mock -r fedora-42-x86_64 --rebuild srpms/flux-security-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
-          name: rpms-flux-security-fedora-42-x86_64
+          name: rpms-security-f42
           path: results/
-      - name: Cleanup
-        if: always()
+      - if: always()
         run: mock -r fedora-42-x86_64 --clean
 
   mock-security-centos-9:
-    name: flux-security (centos-9)
+    name: security (el9)
     runs-on: ubuntu-latest
-    needs: [build-srpm-security, check-container]
+    needs: [build-srpms, check-container]
     container:
-      image: ${{ needs.check-container.outputs.image-to-use }}
+      image: ${{ needs.check-container.outputs.image }}
       options: --privileged
     steps:
-      - uses: actions/checkout@v4
-      - name: Install mock (if fallback)
-        if: needs.check-container.outputs.image-available != 'true'
-        run: dnf install -y mock && usermod -a -G mock root
       - uses: actions/download-artifact@v4
         with:
-          name: srpm-flux-security
+          name: srpms
           path: ./srpms
-      - name: Build flux-security
+      - name: Build
         run: |
-          mock -r centos-stream+epel-9-x86_64 --init
           mock -r centos-stream+epel-9-x86_64 --rebuild srpms/flux-security-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
-          name: rpms-flux-security-centos-stream+epel-9-x86_64
+          name: rpms-security-el9
           path: results/
-      - name: Cleanup
-        if: always()
+      - if: always()
         run: mock -r centos-stream+epel-9-x86_64 --clean
 
   mock-security-centos-10:
-    name: flux-security (centos-10)
+    name: security (el10)
     runs-on: ubuntu-latest
-    needs: [build-srpm-security, check-container]
+    needs: [build-srpms, check-container]
     container:
-      image: ${{ needs.check-container.outputs.image-to-use }}
+      image: ${{ needs.check-container.outputs.image }}
       options: --privileged
     steps:
-      - uses: actions/checkout@v4
-      - name: Install mock (if fallback)
-        if: needs.check-container.outputs.image-available != 'true'
-        run: dnf install -y mock && usermod -a -G mock root
       - uses: actions/download-artifact@v4
         with:
-          name: srpm-flux-security
+          name: srpms
           path: ./srpms
-      - name: Build flux-security
+      - name: Build
         run: |
-          mock -r centos-stream+epel-10-x86_64 --init
           mock -r centos-stream+epel-10-x86_64 --rebuild srpms/flux-security-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
-          name: rpms-flux-security-centos-stream+epel-10-x86_64
+          name: rpms-security-el10
           path: results/
-      - name: Cleanup
-        if: always()
+      - if: always()
         run: mock -r centos-stream+epel-10-x86_64 --clean
 
-  # --- FLUX-CORE BUILDS (wait for flux-security, then run in parallel) ---
+  # flux-core builds (wait for matching security, then parallel)
   mock-core-fedora-41:
-    name: flux-core (fedora-41)
+    name: core (f41)
     runs-on: ubuntu-latest
-    needs: [build-srpm-core, check-container, mock-security-fedora-41]
+    needs: [build-srpms, check-container, mock-security-fedora-41]
     container:
-      image: ${{ needs.check-container.outputs.image-to-use }}
+      image: ${{ needs.check-container.outputs.image }}
       options: --privileged
     steps:
-      - uses: actions/checkout@v4
-      - name: Install mock (if fallback)
-        if: needs.check-container.outputs.image-available != 'true'
-        run: dnf install -y mock && usermod -a -G mock root
       - uses: actions/download-artifact@v4
         with:
-          name: srpm-flux-core
+          name: srpms
           path: ./srpms
       - uses: actions/download-artifact@v4
         with:
-          name: rpms-flux-security-fedora-41-x86_64
-          path: ./security-rpms
-      - name: Build flux-core
+          name: rpms-security-f41
+          path: ./security
+      - name: Build
         run: |
           mock -r fedora-41-x86_64 --init
-          # Install flux-security-devel from CI-built packages
-          SECURITY_RPM=$(ls security-rpms/flux-security-[0-9]*.x86_64.rpm | head -1)
-          SECURITY_DEVEL_RPM=$(ls security-rpms/flux-security-devel-*.x86_64.rpm | head -1)
-          mock -r fedora-41-x86_64 --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
+          mock -r fedora-41-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
           mock -r fedora-41-x86_64 --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
-          name: rpms-flux-core-fedora-41-x86_64
+          name: rpms-core-f41
           path: results/
-      - name: Cleanup
-        if: always()
+      - if: always()
         run: mock -r fedora-41-x86_64 --clean
 
   mock-core-fedora-42:
-    name: flux-core (fedora-42)
+    name: core (f42)
     runs-on: ubuntu-latest
-    needs: [build-srpm-core, check-container, mock-security-fedora-42]
+    needs: [build-srpms, check-container, mock-security-fedora-42]
     container:
-      image: ${{ needs.check-container.outputs.image-to-use }}
+      image: ${{ needs.check-container.outputs.image }}
       options: --privileged
     steps:
-      - uses: actions/checkout@v4
-      - name: Install mock (if fallback)
-        if: needs.check-container.outputs.image-available != 'true'
-        run: dnf install -y mock && usermod -a -G mock root
       - uses: actions/download-artifact@v4
         with:
-          name: srpm-flux-core
+          name: srpms
           path: ./srpms
       - uses: actions/download-artifact@v4
         with:
-          name: rpms-flux-security-fedora-42-x86_64
-          path: ./security-rpms
-      - name: Build flux-core
+          name: rpms-security-f42
+          path: ./security
+      - name: Build
         run: |
           mock -r fedora-42-x86_64 --init
-          SECURITY_RPM=$(ls security-rpms/flux-security-[0-9]*.x86_64.rpm | head -1)
-          SECURITY_DEVEL_RPM=$(ls security-rpms/flux-security-devel-*.x86_64.rpm | head -1)
-          mock -r fedora-42-x86_64 --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
+          mock -r fedora-42-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
           mock -r fedora-42-x86_64 --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
-          name: rpms-flux-core-fedora-42-x86_64
+          name: rpms-core-f42
           path: results/
-      - name: Cleanup
-        if: always()
+      - if: always()
         run: mock -r fedora-42-x86_64 --clean
 
   mock-core-centos-9:
-    name: flux-core (centos-9)
+    name: core (el9)
     runs-on: ubuntu-latest
-    needs: [build-srpm-core, check-container, mock-security-centos-9]
+    needs: [build-srpms, check-container, mock-security-centos-9]
     container:
-      image: ${{ needs.check-container.outputs.image-to-use }}
+      image: ${{ needs.check-container.outputs.image }}
       options: --privileged
     steps:
-      - uses: actions/checkout@v4
-      - name: Install mock (if fallback)
-        if: needs.check-container.outputs.image-available != 'true'
-        run: dnf install -y mock && usermod -a -G mock root
       - uses: actions/download-artifact@v4
         with:
-          name: srpm-flux-core
+          name: srpms
           path: ./srpms
       - uses: actions/download-artifact@v4
         with:
-          name: rpms-flux-security-centos-stream+epel-9-x86_64
-          path: ./security-rpms
-      - name: Build flux-core
+          name: rpms-security-el9
+          path: ./security
+      - name: Build
         run: |
           mock -r centos-stream+epel-9-x86_64 --init
-          SECURITY_RPM=$(ls security-rpms/flux-security-[0-9]*.x86_64.rpm | head -1)
-          SECURITY_DEVEL_RPM=$(ls security-rpms/flux-security-devel-*.x86_64.rpm | head -1)
-          mock -r centos-stream+epel-9-x86_64 --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
+          mock -r centos-stream+epel-9-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
           mock -r centos-stream+epel-9-x86_64 --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
-          name: rpms-flux-core-centos-stream+epel-9-x86_64
+          name: rpms-core-el9
           path: results/
-      - name: Cleanup
-        if: always()
+      - if: always()
         run: mock -r centos-stream+epel-9-x86_64 --clean
 
   mock-core-centos-10:
-    name: flux-core (centos-10)
+    name: core (el10)
     runs-on: ubuntu-latest
-    needs: [build-srpm-core, check-container, mock-security-centos-10]
+    needs: [build-srpms, check-container, mock-security-centos-10]
     container:
-      image: ${{ needs.check-container.outputs.image-to-use }}
+      image: ${{ needs.check-container.outputs.image }}
       options: --privileged
     steps:
-      - uses: actions/checkout@v4
-      - name: Install mock (if fallback)
-        if: needs.check-container.outputs.image-available != 'true'
-        run: dnf install -y mock && usermod -a -G mock root
       - uses: actions/download-artifact@v4
         with:
-          name: srpm-flux-core
+          name: srpms
           path: ./srpms
       - uses: actions/download-artifact@v4
         with:
-          name: rpms-flux-security-centos-stream+epel-10-x86_64
-          path: ./security-rpms
-      - name: Build flux-core
+          name: rpms-security-el10
+          path: ./security
+      - name: Build
         run: |
           mock -r centos-stream+epel-10-x86_64 --init
-          SECURITY_RPM=$(ls security-rpms/flux-security-[0-9]*.x86_64.rpm | head -1)
-          SECURITY_DEVEL_RPM=$(ls security-rpms/flux-security-devel-*.x86_64.rpm | head -1)
-          mock -r centos-stream+epel-10-x86_64 --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
+          mock -r centos-stream+epel-10-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
           mock -r centos-stream+epel-10-x86_64 --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
-          name: rpms-flux-core-centos-stream+epel-10-x86_64
+          name: rpms-core-el10
           path: results/
-      - name: Cleanup
-        if: always()
+      - if: always()
         run: mock -r centos-stream+epel-10-x86_64 --clean
-
-  # ============================================================
-  # STAGE 5: Integration tests (after both packages built)
-  # ============================================================
-  test-integration:
-    name: Integration tests (${{ matrix.release }})
-    runs-on: ubuntu-latest
-    needs:
-      - mock-security-fedora-41
-      - mock-security-fedora-42
-      - mock-security-centos-9
-      - mock-security-centos-10
-      - mock-core-fedora-41
-      - mock-core-fedora-42
-      - mock-core-centos-9
-      - mock-core-centos-10
-      - check-container
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - release: fedora-41-x86_64
-            security-artifact: rpms-flux-security-fedora-41-x86_64
-            core-artifact: rpms-flux-core-fedora-41-x86_64
-          - release: fedora-42-x86_64
-            security-artifact: rpms-flux-security-fedora-42-x86_64
-            core-artifact: rpms-flux-core-fedora-42-x86_64
-          - release: centos-stream+epel-9-x86_64
-            security-artifact: rpms-flux-security-centos-stream+epel-9-x86_64
-            core-artifact: rpms-flux-core-centos-stream+epel-9-x86_64
-          - release: centos-stream+epel-10-x86_64
-            security-artifact: rpms-flux-security-centos-stream+epel-10-x86_64
-            core-artifact: rpms-flux-core-centos-stream+epel-10-x86_64
-    container:
-      image: ${{ needs.check-container.outputs.image-to-use }}
-      options: --privileged
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install mock (if fallback)
-        if: needs.check-container.outputs.image-available != 'true'
-        run: dnf install -y mock && usermod -a -G mock root
-
-      - name: Download flux-security RPMs
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.security-artifact }}
-          path: ./results-security
-
-      - name: Download flux-core RPMs
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.core-artifact }}
-          path: ./results-core
-
-      - name: Initialize mock and install packages
-        run: |
-          mock -r ${{ matrix.release }} --init
-          
-          # Install flux-security packages
-          SECURITY_RPMS=$(ls results-security/flux-security*.x86_64.rpm | grep -v debuginfo | grep -v debugsource)
-          mock -r ${{ matrix.release }} --install $SECURITY_RPMS
-          
-          # Install flux-core packages
-          CORE_RPMS=$(ls results-core/flux-core*.x86_64.rpm results-core/python3-flux*.x86_64.rpm 2>/dev/null | grep -v debuginfo | grep -v debugsource)
-          mock -r ${{ matrix.release }} --install $CORE_RPMS
-
-      - name: Run package tests
-        uses: ./.github/actions/test-packages
-        with:
-          mock-release: ${{ matrix.release }}
-          security-results: results-security
-          core-results: results-core
-
-      - name: Cleanup
-        if: always()
-        run: mock -r ${{ matrix.release }} --clean
-
-  # ============================================================
-  # STAGE 6: Build Summary
-  # ============================================================
-  build-summary:
-    name: Build Summary
-    runs-on: ubuntu-latest
-    needs:
-      - mock-security-fedora-41
-      - mock-security-fedora-42
-      - mock-security-centos-9
-      - mock-security-centos-10
-      - mock-core-fedora-41
-      - mock-core-fedora-42
-      - mock-core-centos-9
-      - mock-core-centos-10
-      - test-integration
-    if: always()
-    steps:
-      - name: Check build results
-        run: |
-          echo "## Build Results Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          echo "### flux-security builds" >> $GITHUB_STEP_SUMMARY
-          echo "| Distribution | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------------|--------|" >> $GITHUB_STEP_SUMMARY
-          
-          [[ "${{ needs.mock-security-fedora-41.result }}" == "success" ]] && s1="✅" || s1="❌"
-          [[ "${{ needs.mock-security-fedora-42.result }}" == "success" ]] && s2="✅" || s2="❌"
-          [[ "${{ needs.mock-security-centos-9.result }}" == "success" ]] && s3="✅" || s3="❌"
-          [[ "${{ needs.mock-security-centos-10.result }}" == "success" ]] && s4="✅" || s4="❌"
-          
-          echo "| Fedora 41 | $s1 |" >> $GITHUB_STEP_SUMMARY
-          echo "| Fedora 42 | $s2 |" >> $GITHUB_STEP_SUMMARY
-          echo "| CentOS Stream 9 | $s3 |" >> $GITHUB_STEP_SUMMARY
-          echo "| CentOS Stream 10 | $s4 |" >> $GITHUB_STEP_SUMMARY
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### flux-core builds" >> $GITHUB_STEP_SUMMARY
-          echo "| Distribution | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------------|--------|" >> $GITHUB_STEP_SUMMARY
-          
-          [[ "${{ needs.mock-core-fedora-41.result }}" == "success" ]] && c1="✅" || c1="❌"
-          [[ "${{ needs.mock-core-fedora-42.result }}" == "success" ]] && c2="✅" || c2="❌"
-          [[ "${{ needs.mock-core-centos-9.result }}" == "success" ]] && c3="✅" || c3="❌"
-          [[ "${{ needs.mock-core-centos-10.result }}" == "success" ]] && c4="✅" || c4="❌"
-          
-          echo "| Fedora 41 | $c1 |" >> $GITHUB_STEP_SUMMARY
-          echo "| Fedora 42 | $c2 |" >> $GITHUB_STEP_SUMMARY
-          echo "| CentOS Stream 9 | $c3 |" >> $GITHUB_STEP_SUMMARY
-          echo "| CentOS Stream 10 | $c4 |" >> $GITHUB_STEP_SUMMARY
-          
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Integration tests" >> $GITHUB_STEP_SUMMARY
-          [[ "${{ needs.test-integration.result }}" == "success" ]] && t="✅ All tests passed" || t="❌ Some tests failed"
-          echo "$t" >> $GITHUB_STEP_SUMMARY
