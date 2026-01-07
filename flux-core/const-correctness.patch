@@ -103,18 +103,19 @@ index 5713e54..e5bc404 100644
          *(p++) = '\0';
          // r = lo, p = hi
          if (((*lo = tm_string2int (r, u)) < 0)
-@@ -257,7 +260,10 @@ static int range_parse (struct idset *n, tm_unit_t u, const char *range)
-         int step = 1;
+@@ -255,10 +258,13 @@ static int range_parse (struct idset *n, tm_unit_t u, const char *range)
+         int stride = 1;
  
-         get_range (s, u, &lo, &hi);
+         // check for a stride and nullify trailing "/":
 -        if ((q = strchr (s, '/'))) {
 +        /* Cast needed: strchr returns const char* in C23, but we know
 +         * s points to part of cpy which is a strdup'd mutable copy.
 +         */
 +        if ((q = (char *)strchr (s, '/'))) {
              *(q++) = '\0';
-             if ((step = strtol (q, NULL, 10)) <= 0) {
-                 errno = EINVAL;
+             if ((stride = string2int (q)) < 0)
+                 goto out;
+         }
 diff --git a/src/modules/connector-local/local.c b/src/modules/connector-local/local.c
 index f247364..bcfdd21 100644
 --- a/src/modules/connector-local/local.c
