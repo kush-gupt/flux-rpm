@@ -38,7 +38,7 @@ srpm:
 	fi
 	
 	# Build SRPM (define _topdir so rpmbuild finds our sources)
-	rpmbuild -bs ~/rpmbuild/SPECS/$(PKGNAME).spec --define "_topdir %(echo $HOME)/rpmbuild" --define "_srcrpmdir $(outdir)"
+	rpmbuild -bs ~/rpmbuild/SPECS/$(PKGNAME).spec --define "_topdir $$HOME/rpmbuild" --define "_srcrpmdir $(outdir)"
 	
 	@echo "SRPM built successfully in $(outdir)"
 
