@@ -1,11 +1,15 @@
 Name:    flux-security
 Version: 0.14.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 
 Summary: Flux Framework Security Components
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-security
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
+
+# Fix GCC 16 const-correctness build failure (PR #211)
+# https://github.com/flux-framework/flux-security/pull/211
+Patch0:  %{url}/pull/211.patch
 
 BuildRequires: pkgconfig(libsodium) >= 1.0.14
 BuildRequires: pkgconfig(jansson) >= 2.6
@@ -96,6 +100,10 @@ mkdir -p %{buildroot}%{_sysconfdir}/flux/imp/conf.d
 %{_mandir}/man3/*.3*
 
 %changelog
+* Tue Jan  7 2025 Kush Gupta <kugupta@redhat.com> - 0.14.0-2
+- Add patch from PR #211 to fix GCC 16 build failure on Fedora Rawhide
+- Fixes const-correctness issues in sign.c (upstream issue #210)
+
 * Thu Feb 27 2025 Mark A. Grondona <mgrondona@llnl.gov> - 0.14.0-1
 - update to flux-security v0.14.0
 
