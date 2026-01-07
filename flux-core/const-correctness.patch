@@ -103,7 +103,7 @@ index 5713e54..e5bc404 100644
          *(p++) = '\0';
          // r = lo, p = hi
          if (((*lo = tm_string2int (r, u)) < 0)
-@@ -255,10 +258,13 @@ static int range_parse (struct idset *n, tm_unit_t u, const char *range)
+@@ -255,8 +258,11 @@ static int range_parse (struct idset *n, tm_unit_t u, const char *range)
          int stride = 1;
  
          // check for a stride and nullify trailing "/":
