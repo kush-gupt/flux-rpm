@@ -283,3 +283,16 @@ index c120e26..59be6c4 100644
          if ((cp = memchr (data, '\n', len))) {
              n = cp - data;
              skip = 1;
+diff --git a/src/cmd/builtin/restore.c b/src/cmd/builtin/restore.c
+index 50b3f84..ff0441e 100644
+--- a/src/cmd/builtin/restore.c
++++ b/src/cmd/builtin/restore.c
+@@ -350,7 +350,7 @@ static json_t *restore_snapshot (struct archive *ar,
+ static int shortblobref_length (const char *blobref)
+ {
+     int len = 8;
+-    char *cp;
++    const char *cp;
+ 
+     if ((cp = strchr (blobref, '-')))
+         len += (cp - blobref) + 1;
