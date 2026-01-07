@@ -280,20 +280,19 @@ jobs:
           path: ./srpms
       - name: Build flux-core with COPR flux-security
         run: |
-          # Create COPR repo file for Fedora
-          cat > /tmp/copr-flux-security.repo << 'EOF'
+          mock -r fedora-41-x86_64 --init
+          # Add COPR repo for flux-security-devel
+          mock -r fedora-41-x86_64 --shell 'cat > /etc/yum.repos.d/copr-flux-security.repo << EOF
           [copr:copr.fedorainfracloud.org:kushgupta:flux-security]
           name=Copr repo for flux-security owned by kushgupta
-          baseurl=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/fedora-$releasever-$basearch/
+          baseurl=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/fedora-\$releasever-\$basearch/
           type=rpm-md
           skip_if_unavailable=True
           gpgcheck=1
           gpgkey=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/pubkey.gpg
           repo_gpgcheck=0
           enabled=1
-          EOF
-          mock -r fedora-41-x86_64 --init
-          mock -r fedora-41-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/copr-flux-security.repo
+          EOF'
           mock -r fedora-41-x86_64 --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
@@ -321,19 +320,18 @@ jobs:
           path: ./srpms
       - name: Build flux-core with COPR flux-security
         run: |
-          cat > /tmp/copr-flux-security.repo << 'EOF'
+          mock -r fedora-42-x86_64 --init
+          mock -r fedora-42-x86_64 --shell 'cat > /etc/yum.repos.d/copr-flux-security.repo << EOF
           [copr:copr.fedorainfracloud.org:kushgupta:flux-security]
           name=Copr repo for flux-security owned by kushgupta
-          baseurl=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/fedora-$releasever-$basearch/
+          baseurl=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/fedora-\$releasever-\$basearch/
           type=rpm-md
           skip_if_unavailable=True
           gpgcheck=1
           gpgkey=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/pubkey.gpg
           repo_gpgcheck=0
           enabled=1
-          EOF
-          mock -r fedora-42-x86_64 --init
-          mock -r fedora-42-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/copr-flux-security.repo
+          EOF'
           mock -r fedora-42-x86_64 --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
@@ -361,19 +359,18 @@ jobs:
           path: ./srpms
       - name: Build flux-core with COPR flux-security
         run: |
-          cat > /tmp/copr-flux-security.repo << 'EOF'
+          mock -r centos-stream+epel-9-x86_64 --init
+          mock -r centos-stream+epel-9-x86_64 --shell 'cat > /etc/yum.repos.d/copr-flux-security.repo << EOF
           [copr:copr.fedorainfracloud.org:kushgupta:flux-security]
           name=Copr repo for flux-security owned by kushgupta
-          baseurl=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/centos-stream-9-$basearch/
+          baseurl=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/centos-stream-9-\$basearch/
           type=rpm-md
           skip_if_unavailable=True
           gpgcheck=1
           gpgkey=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/pubkey.gpg
           repo_gpgcheck=0
           enabled=1
-          EOF
-          mock -r centos-stream+epel-9-x86_64 --init
-          mock -r centos-stream+epel-9-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/copr-flux-security.repo
+          EOF'
           mock -r centos-stream+epel-9-x86_64 --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
@@ -401,19 +398,18 @@ jobs:
           path: ./srpms
       - name: Build flux-core with COPR flux-security
         run: |
-          cat > /tmp/copr-flux-security.repo << 'EOF'
+          mock -r centos-stream+epel-10-x86_64 --init
+          mock -r centos-stream+epel-10-x86_64 --shell 'cat > /etc/yum.repos.d/copr-flux-security.repo << EOF
           [copr:copr.fedorainfracloud.org:kushgupta:flux-security]
           name=Copr repo for flux-security owned by kushgupta
-          baseurl=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/centos-stream-10-$basearch/
+          baseurl=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/centos-stream-10-\$basearch/
           type=rpm-md
           skip_if_unavailable=True
           gpgcheck=1
           gpgkey=https://download.copr.fedorainfracloud.org/results/kushgupta/flux-security/pubkey.gpg
           repo_gpgcheck=0
           enabled=1
-          EOF
-          mock -r centos-stream+epel-10-x86_64 --init
-          mock -r centos-stream+epel-10-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/copr-flux-security.repo
+          EOF'
           mock -r centos-stream+epel-10-x86_64 --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
