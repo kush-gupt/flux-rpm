@@ -1,3 +1,23 @@
+diff --git a/src/common/libhostlist/hostlist.c b/src/common/libhostlist/hostlist.c
+index 1234567..abcdefg 100644
+--- a/src/common/libhostlist/hostlist.c
++++ b/src/common/libhostlist/hostlist.c
+@@ -337,12 +337,13 @@ static int parse_next_range (const char *str, struct _range *range)
+     if (!orig)
+         return -1;
+ 
+-    if ((p = strchr (str, '-'))) {
++    /* Use mutable copy 'orig' instead of const 'str' */
++    if ((p = strchr (orig, '-'))) {
+         *p++ = '\0';
+         if (*p == '-') {  /* don't allow negative numbers */
+             errno = EINVAL;
+             goto error;
+         }
+     }
+-    range->lo = strtoul (str, &q, 10);
++    range->lo = strtoul (orig, &q, 10);
+     if (q == str)  {
 diff --git a/src/common/libeventlog/eventlog.c b/src/common/libeventlog/eventlog.c
 index 1234567..abcdefg 100644
 --- a/src/common/libeventlog/eventlog.c
