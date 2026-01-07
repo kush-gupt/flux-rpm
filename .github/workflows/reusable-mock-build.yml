@@ -1,0 +1,95 @@
+name: Reusable Mock Build
+
+on:
+  workflow_call:
+    inputs:
+      mock-release:
+        description: 'Mock release configuration (e.g., fedora-41-x86_64)'
+        required: true
+        type: string
+      run-tests:
+        description: 'Whether to run package tests after build'
+        required: false
+        type: boolean
+        default: true
+      container-image:
+        description: 'Container image to use for building'
+        required: false
+        type: string
+        default: 'ghcr.io/${{ github.repository }}/flux-rpm-builder:latest'
+
+jobs:
+  mock-build:
+    name: Build (${{ inputs.mock-release }})
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ inputs.container-image }}
+      options: --privileged
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download SRPMs
+        uses: actions/download-artifact@v4
+        with:
+          name: srpms
+          path: ./srpms
+
+      - name: List SRPMs
+        run: ls -la ./srpms/
+
+      - name: Initialize mock
+        run: mock -r ${{ inputs.mock-release }} --init
+
+      - name: Build flux-security
+        run: |
+          set -o pipefail
+          mock -r ${{ inputs.mock-release }} --verbose --rebuild srpms/flux-security-*.src.rpm --resultdir=results-security 2>&1 | tee security-build.log
+
+      - name: Install flux-security in mock
+        run: |
+          SECURITY_RPM=$(ls results-security/flux-security-[0-9]*.x86_64.rpm | head -1)
+          SECURITY_DEVEL_RPM=$(ls results-security/flux-security-devel-*.x86_64.rpm | head -1)
+          echo "Installing: $SECURITY_RPM $SECURITY_DEVEL_RPM"
+          mock -r ${{ inputs.mock-release }} --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
+
+      - name: Build flux-core
+        run: |
+          set -o pipefail
+          mock -r ${{ inputs.mock-release }} --verbose --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
+
+      - name: Run package tests
+        if: inputs.run-tests
+        uses: ./.github/actions/test-packages
+        with:
+          mock-release: ${{ inputs.mock-release }}
+          security-results: results-security
+          core-results: results-core
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "=== Build Summary for ${{ inputs.mock-release }} ===" | tee test-summary.txt
+          echo "Build completed: $(date)" >> test-summary.txt
+          echo "" >> test-summary.txt
+          echo "Packages built:" >> test-summary.txt
+          ls -la results-security/*.rpm 2>/dev/null | grep -v debuginfo >> test-summary.txt || true
+          ls -la results-core/*.rpm 2>/dev/null | grep -v debuginfo >> test-summary.txt || true
+
+      - name: Upload build results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rpms-${{ inputs.mock-release }}
+          path: |
+            results-security/
+            results-core/
+            security-build.log
+            core-build.log
+            test-summary.txt
+
+      - name: Cleanup mock
+        if: always()
+        run: mock -r ${{ inputs.mock-release }} --clean
+

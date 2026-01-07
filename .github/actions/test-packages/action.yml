@@ -1,0 +1,144 @@
+name: Test Flux Packages
+description: Run comprehensive tests on built flux packages in mock environment
+
+inputs:
+  mock-release:
+    description: 'Mock release configuration (e.g., fedora-41-x86_64)'
+    required: true
+  security-results:
+    description: 'Path to flux-security build results'
+    required: true
+    default: 'results-security'
+  core-results:
+    description: 'Path to flux-core build results'
+    required: true
+    default: 'results-core'
+
+runs:
+  using: composite
+  steps:
+    - name: Install all flux packages in mock for testing
+      shell: bash
+      run: |
+        echo "=== Installing flux-security packages ==="
+        SECURITY_RPMS=$(ls ${{ inputs.security-results }}/flux-security*.x86_64.rpm | grep -v debuginfo | grep -v debugsource)
+        echo "Installing: $SECURITY_RPMS"
+        mock -r ${{ inputs.mock-release }} --install $SECURITY_RPMS
+
+        echo "=== Installing flux-core packages ==="
+        CORE_RPMS=$(ls ${{ inputs.core-results }}/flux-core*.x86_64.rpm ${{ inputs.core-results }}/python3-flux*.x86_64.rpm 2>/dev/null | grep -v debuginfo | grep -v debugsource)
+        echo "Installing: $CORE_RPMS"
+        mock -r ${{ inputs.mock-release }} --install $CORE_RPMS
+
+    - name: Test flux-security - Package and library verification
+      shell: bash
+      run: |
+        echo "=== flux-security Verification ==="
+        mock -r ${{ inputs.mock-release }} --shell -- bash -c '
+          set -e
+          echo "--- Package info ---"
+          rpm -qi flux-security
+          rpm -qi flux-security-devel
+
+          echo ""
+          echo "--- Library verification ---"
+          ls -la /usr/lib64/libflux-security.so*
+          ldd /usr/lib64/libflux-security.so.1
+
+          echo ""
+          echo "--- IMP executable ---"
+          ls -la /usr/libexec/flux/flux-imp
+          file /usr/libexec/flux/flux-imp
+
+          echo ""
+          echo "--- Config directories ---"
+          ls -la /etc/flux/security/conf.d/
+          cat /etc/flux/security/conf.d/sign.toml
+
+          echo ""
+          echo "--- pkgconfig ---"
+          pkg-config --libs flux-security
+          pkg-config --cflags flux-security
+        '
+
+    - name: Test flux-core - Binary and library verification
+      shell: bash
+      run: |
+        echo "=== flux-core Verification ==="
+        mock -r ${{ inputs.mock-release }} --shell -- bash -c '
+          set -e
+          echo "--- Package info ---"
+          rpm -qi flux-core
+          rpm -qi flux-core-devel
+          rpm -qi python3-flux
+
+          echo ""
+          echo "--- Binary verification ---"
+          ls -la /usr/bin/flux
+          file /usr/bin/flux
+          /usr/bin/flux version
+
+          echo ""
+          echo "--- Library verification ---"
+          ls -la /usr/lib64/libflux-core.so*
+          ls -la /usr/lib64/libflux-idset.so*
+          ls -la /usr/lib64/libflux-optparse.so*
+          ldd /usr/lib64/libflux-core.so.2
+
+          echo ""
+          echo "--- pkgconfig ---"
+          pkg-config --libs flux-core
+          pkg-config --cflags flux-core
+        '
+
+    - name: Test flux-core - Python bindings
+      shell: bash
+      run: |
+        echo "=== Python Bindings Verification ==="
+        mock -r ${{ inputs.mock-release }} --shell -- bash -c '
+          set -e
+          python3 -c "import flux; print(\"flux module:\", flux.__file__)"
+          python3 -c "from flux import job; print(\"flux.job imported successfully\")"
+          python3 -c "from flux import hostlist; hl = hostlist.Hostlist(\"node[1-10]\"); print(\"Hostlist:\", hl, \"Count:\", len(hl))"
+          python3 -c "from flux import idset; ids = idset.IDset(\"0-9\"); print(\"IDset:\", ids, \"Count:\", len(ids))"
+        '
+
+    - name: Test flux-core - Modules and connectors
+      shell: bash
+      run: |
+        echo "=== Modules and Connectors Verification ==="
+        mock -r ${{ inputs.mock-release }} --shell -- bash -c '
+          set -e
+          echo "--- Connectors ---"
+          ls -la /usr/lib64/flux/connectors/
+          for conn in /usr/lib64/flux/connectors/*.so; do
+            echo "=== $conn ==="
+            ldd "$conn" | grep -E "not found" && echo "MISSING DEPS!" || echo "OK"
+          done
+
+          echo ""
+          echo "--- Modules ---"
+          ls -la /usr/lib64/flux/modules/
+        '
+
+    - name: Test flux-core - Systemd integration
+      shell: bash
+      run: |
+        echo "=== Systemd Integration Verification ==="
+        mock -r ${{ inputs.mock-release }} --shell -- bash -c '
+          set -e
+          ls -la /usr/lib/systemd/system/flux*.service
+          cat /usr/lib/systemd/system/flux.service
+        '
+
+    - name: Test integration - flux-security with flux-core
+      shell: bash
+      run: |
+        echo "=== Integration Test ==="
+        mock -r ${{ inputs.mock-release }} --shell -- bash -c '
+          set -e
+          echo "--- Security library accessible ---"
+          ldconfig -p | grep flux-security
+          ls -la /usr/libexec/flux/flux-imp
+        '
+

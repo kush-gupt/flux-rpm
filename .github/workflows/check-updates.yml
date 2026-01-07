@@ -5,7 +5,14 @@ on:
     - cron: '0 6 * * *'  # Daily at 6 AM UTC
   workflow_dispatch:
 
+env:
+  # Use pre-built container for faster builds
+  BUILDER_IMAGE: ghcr.io/${{ github.repository }}/flux-rpm-builder:latest
+
 jobs:
+  # ============================================================
+  # Check for version updates (runs in parallel)
+  # ============================================================
   check-flux-security:
     name: Check flux-security updates
     runs-on: ubuntu-latest
@@ -24,8 +31,6 @@ jobs:
       - name: Get latest release
         id: latest
         run: |
-          # Note: flux-framework marks all releases as prereleases, so /releases/latest returns 404
-          # Instead, fetch from /releases and get the first (most recent) release
           response=$(curl -sf "https://api.github.com/repos/flux-framework/flux-security/releases?per_page=1") || {
             echo "Failed to fetch releases from GitHub API"
             echo "version=" >> $GITHUB_OUTPUT
@@ -47,7 +52,6 @@ jobs:
           latest="${{ steps.latest.outputs.version }}"
           echo "current_version=$current" >> $GITHUB_OUTPUT
 
-          # Validate we have both versions
           if [ -z "$current" ]; then
             echo "::error::Could not determine current version from spec file"
             exit 1
@@ -55,11 +59,9 @@ jobs:
 
           if [ -z "$latest" ]; then
             echo "::warning::Could not fetch latest version from GitHub API, skipping update check"
-            echo "No update available (API fetch failed)"
             exit 0
           fi
 
-          # Check if versions differ
           if [ "$current" != "$latest" ]; then
             echo "new_version=$latest" >> $GITHUB_OUTPUT
             echo "Update available: $current -> $latest"
@@ -85,8 +87,6 @@ jobs:
       - name: Get latest release
         id: latest
         run: |
-          # Note: flux-framework marks all releases as prereleases, so /releases/latest returns 404
-          # Instead, fetch from /releases and get the first (most recent) release
           response=$(curl -sf "https://api.github.com/repos/flux-framework/flux-core/releases?per_page=1") || {
             echo "Failed to fetch releases from GitHub API"
             echo "version=" >> $GITHUB_OUTPUT
@@ -108,7 +108,6 @@ jobs:
           latest="${{ steps.latest.outputs.version }}"
           echo "current_version=$current" >> $GITHUB_OUTPUT
 
-          # Validate we have both versions
           if [ -z "$current" ]; then
             echo "::error::Could not determine current version from spec file"
             exit 1
@@ -116,11 +115,9 @@ jobs:
 
           if [ -z "$latest" ]; then
             echo "::warning::Could not fetch latest version from GitHub API, skipping update check"
-            echo "No update available (API fetch failed)"
             exit 0
           fi
 
-          # Check if versions differ
           if [ "$current" != "$latest" ]; then
             echo "new_version=$latest" >> $GITHUB_OUTPUT
             echo "Update available: $current -> $latest"
@@ -128,18 +125,44 @@ jobs:
             echo "No update available (current: $current)"
           fi
 
+  # ============================================================
+  # Update jobs (only run if new version detected)
+  # ============================================================
+
+  # Check if pre-built container is available
+  check-container:
+    name: Check container availability
+    runs-on: ubuntu-latest
+    needs: [check-flux-security, check-flux-core]
+    if: needs.check-flux-security.outputs.new_version != '' || needs.check-flux-core.outputs.new_version != ''
+    outputs:
+      image-to-use: ${{ steps.check.outputs.image }}
+    steps:
+      - name: Check if builder image exists
+        id: check
+        run: |
+          if docker manifest inspect ${{ env.BUILDER_IMAGE }} > /dev/null 2>&1; then
+            echo "image=${{ env.BUILDER_IMAGE }}" >> $GITHUB_OUTPUT
+            echo "✅ Using pre-built container"
+          else
+            echo "image=fedora:latest" >> $GITHUB_OUTPUT
+            echo "⚠️ Falling back to fedora:latest"
+          fi
+
   update-flux-security:
     name: Update flux-security
-    needs: check-flux-security
+    needs: [check-flux-security, check-container]
     if: needs.check-flux-security.outputs.new_version != ''
     runs-on: ubuntu-latest
     container:
-      image: fedora:latest
+      image: ${{ needs.check-container.outputs.image-to-use }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: dnf install -y cpio curl jq
+      - name: Install dependencies (if using fallback image)
+        run: |
+          # Only install if not already present
+          which cpio || dnf install -y cpio curl jq
 
       - name: Download new SRPM
         run: |
@@ -160,101 +183,71 @@ jobs:
           if [ -f flux-security/flux-security.spec.new ]; then
             spec="flux-security/flux-security.spec.new"
 
-            # ================================================================
-            # REQUIRED CHANGES (per FEDORA_CHANGES.md)
-            # ================================================================
-
-            # 1. SPDX License (Fedora 40+)
+            # SPDX License (Fedora 40+)
             sed -i 's/^License:.*/License: LGPL-3.0-only/' "$spec"
 
-            # 2. Full GitHub Source URL
+            # Full GitHub Source URL
             sed -i 's|^Source0:.*|Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz|' "$spec"
 
-            # 3. URL tag capitalization
+            # URL tag capitalization
             sed -i 's|^Url:|URL:|' "$spec"
 
-            # 4. Release tag with conditional dist
+            # Release tag with conditional dist
             sed -i 's/^Release:[[:space:]]*\([0-9]*\)%{dist}/Release: \1%{?dist}/' "$spec"
 
-            # 5. Remove deprecated BuildRoot tag
+            # Remove deprecated tags
             sed -i '/^BuildRoot:/d' "$spec"
-
-            # 6. Remove deprecated Group tag
             sed -i '/^Group:/d' "$spec"
-
-            # 7. Remove deprecated %defattr
             sed -i '/%defattr/d' "$spec"
-
-            # 8. Remove deprecated %clean section
             sed -i '/^%clean$/,/^$/d' "$spec"
 
-            # 9. ldconfig scriptlets
+            # ldconfig scriptlets
             sed -i '/^%post[[:space:]]*-p[[:space:]]*\/sbin\/ldconfig/d' "$spec"
             sed -i '/^%postun[[:space:]]*-p[[:space:]]*\/sbin\/ldconfig/d' "$spec"
 
-            # 10. Remove debug package disabling
+            # Remove debug package disabling
             sed -i '/^%define[[:space:]]*debug_package/d' "$spec"
             sed -i '/^%global[[:space:]]*debug_package/d' "$spec"
             sed -i '/^%define[[:space:]]*__spec_install_post/d' "$spec"
             sed -i '/^%global[[:space:]]*__spec_install_post/d' "$spec"
 
-            # 11. Python package naming
+            # Python package naming
             sed -i 's/python3-yaml/python3-pyyaml/g' "$spec"
 
-            # 12-14. Remove LLNL multi-Python setup
+            # Remove LLNL-specific configs
             sed -i '/^%define[[:space:]]*python3_sitearch/d' "$spec"
             sed -i '/^%global[[:space:]]*python3_sitearch/d' "$spec"
-            sed -i '/^%define[[:space:]]*python3[0-9]*_sitearch/d' "$spec"
-            sed -i '/^%global[[:space:]]*python3[0-9]*_sitearch/d' "$spec"
             sed -i '/^BuildRequires:[[:space:]]*python3\.[0-9]/d' "$spec"
-
-            # 15. Remove LLNL conditionals
             sed -i '/0%{?bl6}/,/%endif/d' "$spec"
             sed -i '/0%{?toss}/,/%endif/d' "$spec"
 
-            # 16. Remove custom CFLAGS blocks
+            # Remove custom CFLAGS/LDFLAGS
             sed -i '/^CFLAGS=/d' "$spec"
             sed -i '/^LDFLAGS=/d' "$spec"
             sed -i '/^export CFLAGS/d' "$spec"
             sed -i '/^export LDFLAGS/d' "$spec"
-            sed -i '/^CFLAGS="${KOJI_CFLAGS}"/d' "$spec"
 
-            # 17. Remove LLNL-specific patches
+            # Remove LLNL patches
             sed -i '/^Patch[0-9]*:/d' "$spec"
             sed -i '/^%patch[0-9]/d' "$spec"
 
-            # 18. Remove pip-based sphinx installation
-            sed -i '/pip3[[:space:]]*install.*sphinx\|requirements\.txt/d' "$spec"
-            sed -i '/pip[[:space:]]*install.*sphinx\|requirements\.txt/d' "$spec"
-            sed -i '/export PATH=\$HOME\/.local\/bin:\$PATH/d' "$spec"
-
-            # 19. Remove pip BuildRequires
+            # Remove pip-based sphinx
+            sed -i '/pip3[[:space:]]*install.*sphinx/d' "$spec"
+            sed -i '/pip[[:space:]]*install.*sphinx/d' "$spec"
             sed -i '/^BuildRequires:[[:space:]]*python3-pip/d' "$spec"
-            sed -i '/^BuildRequires:[[:space:]]*python3\.[0-9]*-pip/d' "$spec"
 
-            # 20. Modern build macros
+            # Modern build macros
             sed -i 's/make[[:space:]]*%{?_smp_mflags}/%make_build/g' "$spec"
             sed -i 's/make[[:space:]]*%{_smp_mflags}/%make_build/g' "$spec"
-            sed -i 's/make[[:space:]]*install[[:space:]]*DESTDIR=[^[:space:]]*/\%make_install/g' "$spec"
-            sed -i 's/make[[:space:]]*DESTDIR=[^[:space:]]*[[:space:]]*install/%make_install/g' "$spec"
 
-            # 21. Path variables
+            # Path variables
             sed -i 's/\${RPM_BUILD_ROOT}/%{buildroot}/g' "$spec"
             sed -i 's/\$RPM_BUILD_ROOT/%{buildroot}/g' "$spec"
 
-            # 22. Use %global instead of %define
+            # Use %global
             sed -i 's/^%define /%global /' "$spec"
 
-            # 23. Fix double-slash typo
-            sed -i 's|flux//system|flux/system|g' "$spec"
-
-            # 24. Improve error suppression in chrpath
-            sed -i 's/xargs[[:space:]]*-ti[[:space:]]*chrpath/xargs -I{} chrpath -d {} 2>\/dev\/null || true/g' "$spec"
-
-            # 25. Improve systemctl check
-            sed -i 's|systemctl is-active --quiet|systemctl is-active --quiet 2>/dev/null|g' "$spec"
-
-            # Package-specific: Update Summary
+            # Update Summary
             sed -i 's/^Summary:.*Flux Resource Manager Framework.*/Summary: Flux Framework Security Components/' "$spec"
 
             # Cleanup
@@ -276,18 +269,12 @@ jobs:
 
             ## Fedora Adaptations Applied
 
-            The following adaptations from `FEDORA_CHANGES.md` have been automatically applied:
             - SPDX License identifier (`LGPL-3.0-only`)
             - Full GitHub Source URL
-            - URL tag capitalization
-            - Conditional dist tag (`%{?dist}`)
             - Removed deprecated tags (BuildRoot, Group, %defattr, %clean)
             - Modern ldconfig scriptlets
-            - Debug packages enabled (default)
-            - Python package naming fixes
             - Removed LLNL-specific patches and conditionals
             - Modern build macros (`%make_build`, `%make_install`)
-            - Path variable standardization (`%{buildroot}`)
 
             Please review the spec file changes and ensure Fedora compatibility.
           branch: update-flux-security-${{ needs.check-flux-security.outputs.new_version }}
@@ -295,16 +282,17 @@ jobs:
 
   update-flux-core:
     name: Update flux-core
-    needs: check-flux-core
+    needs: [check-flux-core, check-container]
     if: needs.check-flux-core.outputs.new_version != ''
     runs-on: ubuntu-latest
     container:
-      image: fedora:latest
+      image: ${{ needs.check-container.outputs.image-to-use }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies
-        run: dnf install -y cpio curl jq
+      - name: Install dependencies (if using fallback image)
+        run: |
+          which cpio || dnf install -y cpio curl jq
 
       - name: Download new SRPM
         run: |
@@ -325,105 +313,74 @@ jobs:
           if [ -f flux-core/flux-core.spec.new ]; then
             spec="flux-core/flux-core.spec.new"
 
-            # ================================================================
-            # REQUIRED CHANGES (per FEDORA_CHANGES.md)
-            # ================================================================
-
-            # 1. SPDX License (Fedora 40+)
+            # SPDX License (Fedora 40+)
             sed -i 's/^License:.*/License: LGPL-3.0-only/' "$spec"
 
-            # 2. Full GitHub Source URL
+            # Full GitHub Source URL
             sed -i 's|^Source0:.*|Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz|' "$spec"
 
-            # 3. URL tag capitalization
+            # URL tag capitalization
             sed -i 's|^Url:|URL:|' "$spec"
 
-            # 4. Release tag with conditional dist
+            # Release tag with conditional dist
             sed -i 's/^Release:[[:space:]]*\([0-9]*\)%{dist}/Release: \1%{?dist}/' "$spec"
 
-            # 5. Remove deprecated BuildRoot tag
+            # Remove deprecated tags
             sed -i '/^BuildRoot:/d' "$spec"
-
-            # 6. Remove deprecated Group tag
             sed -i '/^Group:/d' "$spec"
-
-            # 7. Remove deprecated %defattr
             sed -i '/%defattr/d' "$spec"
-
-            # 8. Remove deprecated %clean section
             sed -i '/^%clean$/,/^$/d' "$spec"
 
-            # 9. ldconfig scriptlets
+            # ldconfig scriptlets
             sed -i '/^%post[[:space:]]*-p[[:space:]]*\/sbin\/ldconfig/d' "$spec"
             sed -i '/^%postun[[:space:]]*-p[[:space:]]*\/sbin\/ldconfig/d' "$spec"
 
-            # 10. Remove debug package disabling
+            # Remove debug package disabling
             sed -i '/^%define[[:space:]]*debug_package/d' "$spec"
             sed -i '/^%global[[:space:]]*debug_package/d' "$spec"
             sed -i '/^%define[[:space:]]*__spec_install_post/d' "$spec"
             sed -i '/^%global[[:space:]]*__spec_install_post/d' "$spec"
 
-            # 11. Python package naming
+            # Python package naming
             sed -i 's/python3-yaml/python3-pyyaml/g' "$spec"
 
-            # 12-14. Remove LLNL multi-Python setup
+            # Remove LLNL-specific configs
             sed -i '/^%define[[:space:]]*python3_sitearch/d' "$spec"
             sed -i '/^%global[[:space:]]*python3_sitearch/d' "$spec"
-            sed -i '/^%define[[:space:]]*python3[0-9]*_sitearch/d' "$spec"
-            sed -i '/^%global[[:space:]]*python3[0-9]*_sitearch/d' "$spec"
             sed -i '/^BuildRequires:[[:space:]]*python3\.[0-9]/d' "$spec"
-            # Remove versioned python packages
             sed -i '/^%package[[:space:]]*python3\.[0-9]/,/^%package\|^%prep/d' "$spec"
             sed -i '/^%description[[:space:]]*python3\.[0-9]/,/^%package\|^%description\|^%prep/d' "$spec"
             sed -i '/^%files[[:space:]]*python3\.[0-9]/,/^%files\|^%changelog/d' "$spec"
-
-            # 15. Remove LLNL conditionals
             sed -i '/0%{?bl6}/,/%endif/d' "$spec"
             sed -i '/0%{?toss}/,/%endif/d' "$spec"
 
-            # 16. Remove custom CFLAGS blocks
+            # Remove custom CFLAGS/LDFLAGS
             sed -i '/^CFLAGS=/d' "$spec"
             sed -i '/^LDFLAGS=/d' "$spec"
             sed -i '/^export CFLAGS/d' "$spec"
             sed -i '/^export LDFLAGS/d' "$spec"
-            sed -i '/^CFLAGS="${KOJI_CFLAGS}"/d' "$spec"
 
-            # 17. Remove LLNL-specific patches
+            # Remove LLNL patches
             sed -i '/^Patch[0-9]*:/d' "$spec"
             sed -i '/^%patch[0-9]/d' "$spec"
 
-            # 18. Remove pip-based sphinx installation
-            sed -i '/pip3[[:space:]]*install.*sphinx\|requirements\.txt/d' "$spec"
-            sed -i '/pip[[:space:]]*install.*sphinx\|requirements\.txt/d' "$spec"
-            sed -i '/export PATH=\$HOME\/.local\/bin:\$PATH/d' "$spec"
-
-            # 19. Remove pip BuildRequires
+            # Remove pip-based sphinx
+            sed -i '/pip3[[:space:]]*install.*sphinx/d' "$spec"
+            sed -i '/pip[[:space:]]*install.*sphinx/d' "$spec"
             sed -i '/^BuildRequires:[[:space:]]*python3-pip/d' "$spec"
-            sed -i '/^BuildRequires:[[:space:]]*python3\.[0-9]*-pip/d' "$spec"
 
-            # 20. Modern build macros
+            # Modern build macros
             sed -i 's/make[[:space:]]*%{?_smp_mflags}/%make_build/g' "$spec"
             sed -i 's/make[[:space:]]*%{_smp_mflags}/%make_build/g' "$spec"
-            sed -i 's/make[[:space:]]*install[[:space:]]*DESTDIR=[^[:space:]]*/\%make_install/g' "$spec"
-            sed -i 's/make[[:space:]]*DESTDIR=[^[:space:]]*[[:space:]]*install/%make_install/g' "$spec"
 
-            # 21. Path variables
+            # Path variables
             sed -i 's/\${RPM_BUILD_ROOT}/%{buildroot}/g' "$spec"
             sed -i 's/\$RPM_BUILD_ROOT/%{buildroot}/g' "$spec"
 
-            # 22. Use %global instead of %define
+            # Use %global
             sed -i 's/^%define /%global /' "$spec"
 
-            # 23. Fix double-slash typo
-            sed -i 's|flux//system|flux/system|g' "$spec"
-
-            # 24. Improve error suppression in chrpath
-            sed -i 's/xargs[[:space:]]*-ti[[:space:]]*chrpath/xargs -I{} chrpath -d {} 2>\/dev\/null || true/g' "$spec"
-
-            # 25. Improve systemctl check
-            sed -i 's|systemctl is-active --quiet|systemctl is-active --quiet 2>/dev/null|g' "$spec"
-
-            # Package-specific: Use flux-security-devel
+            # Use flux-security-devel
             sed -i 's/^BuildRequires:[[:space:]]*flux-security[[:space:]]*>=/BuildRequires: flux-security-devel >=/' "$spec"
 
             # Cleanup
@@ -445,19 +402,13 @@ jobs:
 
             ## Fedora Adaptations Applied
 
-            The following adaptations from `FEDORA_CHANGES.md` have been automatically applied:
             - SPDX License identifier (`LGPL-3.0-only`)
             - Full GitHub Source URL
-            - URL tag capitalization
-            - Conditional dist tag (`%{?dist}`)
             - Removed deprecated tags (BuildRoot, Group, %defattr, %clean)
             - Modern ldconfig scriptlets
-            - Debug packages enabled (default)
-            - Python package naming fixes (`python3-pyyaml`)
             - Removed versioned Python subpackages (use `python3-flux`)
             - Removed LLNL-specific patches and conditionals
             - Modern build macros (`%make_build`, `%make_install`)
-            - Path variable standardization (`%{buildroot}`)
             - Corrected `flux-security-devel` dependency
 
             Please review the spec file changes and ensure Fedora compatibility.
