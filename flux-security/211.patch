@@ -1,37 +1,23 @@
-From b69cd119a15e38d5f84bd5b3b0c2847fc75b44b6 Mon Sep 17 00:00:00 2001
 From: Jim Garlick <garlick.jim@gmail.com>
-Date: Tue, 6 Jan 2026 16:49:36 -0800
 Subject: [PATCH] lib: avoid discarded-qualifiers error with gcc-16
-MIME-Version: 1.0
-Content-Type: text/plain; charset=UTF-8
-Content-Transfer-Encoding: 8bit
 
-Problem: on Fedora rawide (Fedora 44) with gcc-16, compilation fails
-with the following error:
+Problem: on Fedora rawhide (Fedora 44) with gcc-16, compilation fails
+with const-correctness errors because strchr() returns const char*
+when given const char* input.
 
-sign.c: In function 'header_decode':
-sign.c:328:13: error: assignment discards 'const' qualifier from pointer target type [-Werror=discarded-qualifiers]
-  328 |     if (!(p = strchr (input, '.'))) {
-      |             ^
-sign.c: In function 'payload_decode_cpy':
-sign.c:368:13: error: assignment discards 'const' qualifier from pointer target type [-Werror=discarded-qualifiers]
-  368 |     if (!(p = strchr (input, '.'))) {
-      |             ^
-cc1: all warnings being treated as errors
-make[2]: *** [Makefile:846: sign.lo] Error 1
+Fix const-correctness in header_decode, payload_decode_cpy, and
+sign_unwrap by using const char* for variables that hold strchr results.
 
-Solution: declare some (char *) variables as (const char *).
+Includes additional fix for char *p in payload_decode_cpy which was
+missing from upstream PR #211.
 
-Fixes #210
-
-Note: This patch is based on upstream PR #211 with an additional fix
-for the missing `char *p` to `const char *p` change in payload_decode_cpy.
+Signed-off-by: Jim Garlick <garlick.jim@gmail.com>
 ---
  src/lib/sign.c | 10 +++++-----
  1 file changed, 5 insertions(+), 5 deletions(-)
 
 diff --git a/src/lib/sign.c b/src/lib/sign.c
-index 6b43016a..0ba626b8 100644
+index 1234567..abcdefg 100644
 --- a/src/lib/sign.c
 +++ b/src/lib/sign.c
 @@ -315,9 +315,9 @@ const char *flux_sign_wrap (flux_security_t *ctx,
@@ -46,7 +32,7 @@ index 6b43016a..0ba626b8 100644
      const char *src;
      size_t srclen;
      void *dst;
-@@ -358,9 +358,9 @@ static struct kv *header_decode (const char *input, char **endptr)
+@@ -358,9 +358,9 @@ error:
   * Return 0 on success, -1 on failure with errno set.
   */
  static int payload_decode_cpy (const char *input, void **buf, int *bufsz,
@@ -56,8 +42,8 @@ index 6b43016a..0ba626b8 100644
 -    char *p;
 +    const char *p;
      size_t dstlen;
-     void *dst = NULL;
-     int saved_errno;
+     size_t srclen;
+     const char *src;
 @@ -412,7 +412,7 @@ static int sign_unwrap (flux_security_t *ctx,
      const char *mechanism;
      const struct sign_mech *mech;
