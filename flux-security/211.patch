@@ -9,12 +9,12 @@ Content-Transfer-Encoding: 8bit
 Problem: on Fedora rawide (Fedora 44) with gcc-16, compilation fails
 with the following error:
 
-sign.c: In function ‘header_decode’:
-sign.c:328:13: error: assignment discards ‘const’ qualifier from pointer target type [-Werror=discarded-qualifiers]
+sign.c: In function 'header_decode':
+sign.c:328:13: error: assignment discards 'const' qualifier from pointer target type [-Werror=discarded-qualifiers]
   328 |     if (!(p = strchr (input, '.'))) {
       |             ^
-sign.c: In function ‘payload_decode_cpy’:
-sign.c:368:13: error: assignment discards ‘const’ qualifier from pointer target type [-Werror=discarded-qualifiers]
+sign.c: In function 'payload_decode_cpy':
+sign.c:368:13: error: assignment discards 'const' qualifier from pointer target type [-Werror=discarded-qualifiers]
   368 |     if (!(p = strchr (input, '.'))) {
       |             ^
 cc1: all warnings being treated as errors
@@ -23,9 +23,12 @@ make[2]: *** [Makefile:846: sign.lo] Error 1
 Solution: declare some (char *) variables as (const char *).
 
 Fixes #210
+
+Note: This patch is based on upstream PR #211 with an additional fix
+for the missing `char *p` to `const char *p` change in payload_decode_cpy.
 ---
- src/lib/sign.c | 8 ++++----
- 1 file changed, 4 insertions(+), 4 deletions(-)
+ src/lib/sign.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
 
 diff --git a/src/lib/sign.c b/src/lib/sign.c
 index 6b43016a..0ba626b8 100644
@@ -43,15 +46,18 @@ index 6b43016a..0ba626b8 100644
      const char *src;
      size_t srclen;
      void *dst;
-@@ -358,7 +358,7 @@ static struct kv *header_decode (const char *input, char **endptr)
+@@ -358,9 +358,9 @@ static struct kv *header_decode (const char *input, char **endptr)
   * Return 0 on success, -1 on failure with errno set.
   */
  static int payload_decode_cpy (const char *input, void **buf, int *bufsz,
 -                               char **endptr)
 +                               const char **endptr)
  {
-     char *p;
+-    char *p;
++    const char *p;
      size_t dstlen;
+     void *dst = NULL;
+     int saved_errno;
 @@ -412,7 +412,7 @@ static int sign_unwrap (flux_security_t *ctx,
      const char *mechanism;
      const struct sign_mech *mech;

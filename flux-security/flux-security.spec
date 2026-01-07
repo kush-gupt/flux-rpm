@@ -7,11 +7,10 @@ License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-security
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 
-# Fix GCC 16 const-correctness build failure (PR #211)
+# Fix GCC 16 const-correctness build failure (based on PR #211)
 # https://github.com/flux-framework/flux-security/pull/211
+# Note: Includes additional fix for missing const in payload_decode_cpy
 Patch0:  211.patch
-# PR #211 is incomplete - missing const fix in payload_decode_cpy
-Patch1:  fix-payload-decode-const.patch
 
 BuildRequires: pkgconfig(libsodium) >= 1.0.14
 BuildRequires: pkgconfig(jansson) >= 2.6
@@ -102,9 +101,9 @@ mkdir -p %{buildroot}%{_sysconfdir}/flux/imp/conf.d
 %{_mandir}/man3/*.3*
 
 %changelog
-* Wed Jan  7 2026 Kush Gupta <kugupta@redhat.com> - 0.14.0-2
-- Add patch from PR #211 to fix GCC 16 build failure on Fedora Rawhide
-- Add supplementary patch for missing const fix in payload_decode_cpy
+* Tue Jan  6 2026 Kush Gupta <kugupta@redhat.com> - 0.14.0-2
+- Add patch based on PR #211 to fix GCC 16 build failure on Fedora Rawhide
+- Includes fix for missing const in payload_decode_cpy (incomplete in upstream PR)
 - Fixes const-correctness issues in sign.c (upstream issue #210)
 
 * Thu Feb 27 2025 Mark A. Grondona <mgrondona@llnl.gov> - 0.14.0-1
