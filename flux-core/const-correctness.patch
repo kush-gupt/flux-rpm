@@ -207,3 +207,29 @@ index 6a0bd54..c75dfed 100644
          if (start == NULL) {
              /*  No more mustache tags, put rest of string and finish
               */
+diff --git a/src/common/librlist/match.c b/src/common/librlist/match.c
+index 6895c1b..898ebe0 100644
+--- a/src/common/librlist/match.c
++++ b/src/common/librlist/match.c
+@@ -220,7 +220,7 @@ bool job_constraint_match (struct job_constraint *c, const struct rnode *n)
+     return c->match (c, n);
+ }
+ 
+-static char *property_query_string_invalid (const char *s)
++static const char *property_query_string_invalid (const char *s)
+ {
+     /*  Return first invalid character.
+      *  Invalid chaaracters are listed in RFC 20, but we specifically
+diff --git a/src/common/librlist/rlist.c b/src/common/librlist/rlist.c
+index a61eb80..1d95589 100644
+--- a/src/common/librlist/rlist.c
++++ b/src/common/librlist/rlist.c
+@@ -1038,7 +1038,7 @@ static void property_destructor (void **arg)
+     }
+ }
+ 
+-static char * property_string_invalid (const char *s)
++static const char * property_string_invalid (const char *s)
+ {
+     return strpbrk (s, "^&'\"`|()");
+ }
