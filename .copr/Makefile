@@ -31,6 +31,12 @@ srpm:
 	# Copy spec file
 	cp $(spec) ~/rpmbuild/SPECS/
 	
+	# Copy any patches from spec directory to SOURCES
+	@if ls $(SPEC_DIR)*.patch 1>/dev/null 2>&1; then \
+		echo "Copying patches..."; \
+		cp $(SPEC_DIR)*.patch ~/rpmbuild/SOURCES/; \
+	fi
+	
 	# Build SRPM
 	rpmbuild -bs ~/rpmbuild/SPECS/$(PKGNAME).spec --define "_srcrpmdir $(outdir)"
 	

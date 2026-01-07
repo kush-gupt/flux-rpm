@@ -58,6 +58,9 @@ jobs:
         run: |
           cp flux-security/flux-security.spec ~/rpmbuild/SPECS/
           cp flux-core/flux-core.spec ~/rpmbuild/SPECS/
+          # Copy any patches to SOURCES
+          cp flux-security/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
+          cp flux-core/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
           rpmbuild -bs ~/rpmbuild/SPECS/flux-security.spec
           rpmbuild -bs ~/rpmbuild/SPECS/flux-core.spec
 

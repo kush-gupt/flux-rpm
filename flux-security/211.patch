@@ -1,0 +1,63 @@
+From b69cd119a15e38d5f84bd5b3b0c2847fc75b44b6 Mon Sep 17 00:00:00 2001
+From: Jim Garlick <garlick.jim@gmail.com>
+Date: Tue, 6 Jan 2026 16:49:36 -0800
+Subject: [PATCH] lib: avoid discarded-qualifiers error with gcc-16
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Problem: on Fedora rawide (Fedora 44) with gcc-16, compilation fails
+with the following error:
+
+sign.c: In function ‘header_decode’:
+sign.c:328:13: error: assignment discards ‘const’ qualifier from pointer target type [-Werror=discarded-qualifiers]
+  328 |     if (!(p = strchr (input, '.'))) {
+      |             ^
+sign.c: In function ‘payload_decode_cpy’:
+sign.c:368:13: error: assignment discards ‘const’ qualifier from pointer target type [-Werror=discarded-qualifiers]
+  368 |     if (!(p = strchr (input, '.'))) {
+      |             ^
+cc1: all warnings being treated as errors
+make[2]: *** [Makefile:846: sign.lo] Error 1
+
+Solution: declare some (char *) variables as (const char *).
+
+Fixes #210
+---
+ src/lib/sign.c | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/src/lib/sign.c b/src/lib/sign.c
+index 6b43016a..0ba626b8 100644
+--- a/src/lib/sign.c
++++ b/src/lib/sign.c
+@@ -315,9 +315,9 @@ const char *flux_sign_wrap (flux_security_t *ctx,
+  * Return header on success or NULL on error with errno set.
+  * Set 'endptr' to period ('.') delimiter following HEADER.
+  */
+-static struct kv *header_decode (const char *input, char **endptr)
++static struct kv *header_decode (const char *input, const char **endptr)
+ {
+-    char *p;
++    const char *p;
+     const char *src;
+     size_t srclen;
+     void *dst;
+@@ -358,7 +358,7 @@ static struct kv *header_decode (const char *input, char **endptr)
+  * Return 0 on success, -1 on failure with errno set.
+  */
+ static int payload_decode_cpy (const char *input, void **buf, int *bufsz,
+-                               char **endptr)
++                               const char **endptr)
+ {
+     char *p;
+     size_t dstlen;
+@@ -412,7 +412,7 @@ static int sign_unwrap (flux_security_t *ctx,
+     const char *mechanism;
+     const struct sign_mech *mech;
+     const cf_t *allowed_types;
+-    char *endptr;
++    const char *endptr;
+ 
+     if (!ctx || !input || !(flags == 0 || flags == FLUX_SIGN_NOVERIFY)) {
+         errno = EINVAL;
