@@ -103,7 +103,7 @@ mkdir -p %{buildroot}%{_sysconfdir}/flux/imp/conf.d
 %changelog
 * Tue Jan  6 2026 Kush Gupta <kugupta@redhat.com> - 0.14.0-2
 - Add patch based on PR #211 to fix GCC 16 build failure on Fedora Rawhide
-- Includes fix for missing const in payload_decode_cpy (incomplete in upstream PR)
+- Includes fix for missing const in payload_decode_cpy (potentially incomplete in upstream PR)
 - Fixes const-correctness issues in sign.c (upstream issue #210)
 
 * Thu Feb 27 2025 Mark A. Grondona <mgrondona@llnl.gov> - 0.14.0-1

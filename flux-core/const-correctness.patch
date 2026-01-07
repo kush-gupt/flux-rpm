@@ -1,0 +1,171 @@
+diff --git a/src/common/libjob/sign_none.c b/src/common/libjob/sign_none.c
+index 10e0377..a847bce 100644
+--- a/src/common/libjob/sign_none.c
++++ b/src/common/libjob/sign_none.c
+@@ -174,7 +174,7 @@ int sign_none_unwrap (const char *input,
+                       int *payloadsz,
+                       uint32_t *userid)
+ {
+-    char *p;
++    const char *p;
+ 
+     if (!input || !userid || !payload || !payloadsz)
+         goto error_inval;
+diff --git a/src/common/liboptparse/getopt.c b/src/common/liboptparse/getopt.c
+index 43d64e2..220c56f 100644
+--- a/src/common/liboptparse/getopt.c
++++ b/src/common/liboptparse/getopt.c
+@@ -836,7 +836,7 @@ _getopt_internal_r (int argc, char *const *argv, const char *optstring,
+ 
+   {
+     char c = *d->__nextchar++;
+-    char *temp = strchr (optstring, c);
++    const char *temp = strchr (optstring, c);
+ 
+     /* Increment `optind' when we start to process its last character.  */
+     if (*d->__nextchar == '\0')
+diff --git a/src/common/libpmi/keyval.c b/src/common/libpmi/keyval.c
+index b6f31f0..169853c 100644
+--- a/src/common/libpmi/keyval.c
++++ b/src/common/libpmi/keyval.c
+@@ -21,7 +21,7 @@
+ 
+ static const char *parse_val (const char *s, const char *key)
+ {
+-    char *match;
++    const char *match;
+     const char *cp = s;
+     int keylen = strlen (key);
+ 
+diff --git a/src/common/librouter/disconnect.c b/src/common/librouter/disconnect.c
+index 6aba1ab..e6388b6 100644
+--- a/src/common/librouter/disconnect.c
++++ b/src/common/librouter/disconnect.c
+@@ -69,7 +69,7 @@ static void hash_destructor (void **item)
+  */
+ int disconnect_topic (const char *topic, char *buf, int len)
+ {
+-    char *p;
++    const char *p;
+     int service_len;
+     int used;
+ 
+diff --git a/src/common/libsubprocess/command.c b/src/common/libsubprocess/command.c
+index d5942a4..82af852 100644
+--- a/src/common/libsubprocess/command.c
++++ b/src/common/libsubprocess/command.c
+@@ -173,7 +173,7 @@ static char **expand_argz (char *argz, size_t argz_len)
+  */
+ static char *env_entry_name (char *entry, char *dst, size_t len)
+ {
+-    char *p;
++    const char *p;
+     if (!entry)
+         return NULL;
+     /* If there is no '=' in entry, then "name" is the entire entry. */
+@@ -199,7 +199,7 @@ static char *env_entry_name (char *entry, char *dst, size_t len)
+  */
+ static const char * env_entry_value (const char *entry)
+ {
+-    char *p;
++    const char *p;
+     if (!entry || !(p = strchr (entry, '=')))
+         return NULL;
+     return p+1;
+diff --git a/src/common/libutil/basename.c b/src/common/libutil/basename.c
+index bdd9065..43ccbf3 100644
+--- a/src/common/libutil/basename.c
++++ b/src/common/libutil/basename.c
+@@ -21,8 +21,8 @@
+ 
+ char *basename_simple (const char *path)
+ {
+-    char *p = strrchr (path, '/');
+-    return p ? p + 1 : (char *)path;
++    const char *p = strrchr (path, '/');
++    return (char *) (p ? p + 1 : path);
+ }
+ 
+ // vi:ts=4 sw=4 expandtab
+diff --git a/src/common/libutil/cronodate.c b/src/common/libutil/cronodate.c
+index 5713e54..e5bc404 100644
+--- a/src/common/libutil/cronodate.c
++++ b/src/common/libutil/cronodate.c
+@@ -222,7 +222,7 @@ static int tm_string2int (const char *s, tm_unit_t u)
+ 
+ static int get_range (const char *r, tm_unit_t u, int *lo, int *hi)
+ {
+-    char *p;
++    const char *p;
+     if (streq (r, "*")) {
+         *lo = tm_unit_min (u);
+         *hi = tm_unit_max (u);
+@@ -244,7 +244,9 @@ static int get_range (const char *r, tm_unit_t u, int *lo, int *hi)
+ 
+ static int range_parse (struct idset *n, tm_unit_t u, const char *range)
+ {
+-    char *cpy, *a1, *q, *s, *saveptr;
++    char *cpy, *a1, *saveptr;
++    const char *q;
++    char *s;
+     int hi, lo;
+     int rc = -1;
+ 
+diff --git a/src/modules/connector-local/local.c b/src/modules/connector-local/local.c
+index f247364..bcfdd21 100644
+--- a/src/modules/connector-local/local.c
++++ b/src/modules/connector-local/local.c
+@@ -284,7 +284,7 @@ static int mod_main (flux_t *h, int argc, char **argv)
+ {
+     struct connector_local ctx;
+     const char *local_uri = NULL;
+-    char *tmpdir;
++    const char *tmpdir;
+     const char *sockpath;
+     flux_error_t error;
+     int rc = -1;
+diff --git a/src/modules/job-info/util.c b/src/modules/job-info/util.c
+index 68f3ef0..311f162 100644
+--- a/src/modules/job-info/util.c
++++ b/src/modules/job-info/util.c
+@@ -53,7 +53,7 @@ bool get_next_eventlog_entry (const char **pp,
+                               const char **tok,
+                               size_t *toklen)
+ {
+-    char *term;
++    const char *term;
+ 
+     if (!(term = strchr (*pp, '\n')))
+         return false;
+diff --git a/src/modules/job-list/job_data.c b/src/modules/job-list/job_data.c
+index aa789f2..d14553d 100644
+--- a/src/modules/job-list/job_data.c
++++ b/src/modules/job-list/job_data.c
+@@ -77,7 +77,7 @@ struct job *job_create (flux_t *h, flux_jobid_t id)
+  * full path */
+ static const char *parse_job_name (const char *path)
+ {
+-    char *p = strrchr (path, '/');
++    const char *p = strrchr (path, '/');
+     if (p) {
+         p++;
+         /* user mistake, specified a directory with trailing '/',
+diff --git a/src/shell/mustache.c b/src/shell/mustache.c
+index 6a0bd54..c75dfed 100644
+--- a/src/shell/mustache.c
++++ b/src/shell/mustache.c
+@@ -74,11 +74,11 @@ char *mustache_render (struct mustache_renderer *mr,
+     }
+     for (;;) {
+         int len;
+-        char *end;
++        const char *end;
+ 
+         /*  Look for opening "{{"
+          */
+-        char *start = strstr (pos, "{{");
++        const char *start = strstr (pos, "{{");
+         if (start == NULL) {
+             /*  No more mustache tags, put rest of string and finish
+              */
+

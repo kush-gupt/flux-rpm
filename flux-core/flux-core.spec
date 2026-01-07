@@ -5,6 +5,7 @@ Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
+Patch0: const-correctness.patch
 
 # Redhat only provides /usr/bin/false, but tests look for /bin/false
 %global __requires_exclude /bin/false
