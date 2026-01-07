@@ -221,7 +221,7 @@ index 6895c1b..898ebe0 100644
      /*  Return first invalid character.
       *  Invalid chaaracters are listed in RFC 20, but we specifically
 diff --git a/src/common/librlist/rlist.c b/src/common/librlist/rlist.c
-index a61eb80..9dca0cf 100644
+index a61eb80..11441a1 100644
 --- a/src/common/librlist/rlist.c
 +++ b/src/common/librlist/rlist.c
 @@ -1038,7 +1038,7 @@ static void property_destructor (void **arg)
@@ -248,15 +248,16 @@ index a61eb80..9dca0cf 100644
                     name);
          errno = EINVAL;
          goto out;
-@@ -1127,6 +1128,7 @@ int rlist_assign_properties (struct rlist *rl,
+@@ -1126,7 +1127,7 @@ int rlist_assign_properties (struct rlist *rl,
+ {
      json_t *val;
      const char *name;
-     char *p;
+-    char *p;
 +    const char *invalid;
      int rc = -1;
  
      if (!rl || !properties) {
-@@ -1153,10 +1155,10 @@ int rlist_assign_properties (struct rlist *rl,
+@@ -1153,10 +1154,10 @@ int rlist_assign_properties (struct rlist *rl,
              errno = EINVAL;
              goto error;
          }
