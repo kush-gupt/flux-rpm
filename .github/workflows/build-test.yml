@@ -293,7 +293,7 @@ jobs:
           enabled=1
           EOF
           mock -r fedora-41-x86_64 --init
-          mock -r fedora-41-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/
+          mock -r fedora-41-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/copr-flux-security.repo
           mock -r fedora-41-x86_64 --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
@@ -333,7 +333,7 @@ jobs:
           enabled=1
           EOF
           mock -r fedora-42-x86_64 --init
-          mock -r fedora-42-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/
+          mock -r fedora-42-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/copr-flux-security.repo
           mock -r fedora-42-x86_64 --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
@@ -373,7 +373,7 @@ jobs:
           enabled=1
           EOF
           mock -r centos-stream+epel-9-x86_64 --init
-          mock -r centos-stream+epel-9-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/
+          mock -r centos-stream+epel-9-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/copr-flux-security.repo
           mock -r centos-stream+epel-9-x86_64 --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
@@ -413,7 +413,7 @@ jobs:
           enabled=1
           EOF
           mock -r centos-stream+epel-10-x86_64 --init
-          mock -r centos-stream+epel-10-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/
+          mock -r centos-stream+epel-10-x86_64 --copyin /tmp/copr-flux-security.repo /etc/yum.repos.d/copr-flux-security.repo
           mock -r centos-stream+epel-10-x86_64 --rebuild srpms/flux-core-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
