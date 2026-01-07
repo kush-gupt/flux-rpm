@@ -71,7 +71,10 @@ jobs:
           platforms: linux/amd64
 
       - name: Test container image
+        if: github.event_name != 'pull_request'
         run: |
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+          # Use the 'latest' tag for main branch, otherwise use short SHA
+          IMAGE_TAG="${{ github.ref_name == 'main' && 'latest' || github.sha }}"
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG} \
             bash -c "rpm --version && rpmlint --version && mock --version"
 
