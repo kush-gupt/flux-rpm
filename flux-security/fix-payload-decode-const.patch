@@ -11,10 +11,9 @@ Signed-off-by: Kush Gupta <kugupta@redhat.com>
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/src/lib/sign.c b/src/lib/sign.c
-index 0ba626b..1234567 100644
 --- a/src/lib/sign.c
 +++ b/src/lib/sign.c
-@@ -361,7 +361,7 @@ static struct kv *header_decode (const char *input, const char **endptr)
+@@ -362,7 +362,7 @@ static int payload_decode_cpy (const cha
  static int payload_decode_cpy (const char *input, void **buf, int *bufsz,
                                 const char **endptr)
  {
@@ -23,4 +22,3 @@ index 0ba626b..1234567 100644
      size_t dstlen;
      void *dst = NULL;
      int saved_errno;
-
