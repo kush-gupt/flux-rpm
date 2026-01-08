@@ -14,6 +14,10 @@ ExcludeArch: ppc64le
 BuildRequires: flux-core-devel >= 0.75.0
 BuildRequires: cmake
 BuildRequires: gcc-c++
+# flux-sched requires GCC 12+ for C++20 features
+%if 0%{?rhel} == 9
+BuildRequires: gcc-toolset-13-gcc-c++
+%endif
 BuildRequires: pkgconfig(libzmq) >= 4.1.4
 BuildRequires: pkgconfig(jansson) >= 2.6
 BuildRequires: pkgconfig(hwloc) >= 2.1
@@ -70,6 +74,11 @@ matching and queue management services, respectively.
 
 %build
 export LC_ALL=en_US.UTF-8
+
+# Enable gcc-toolset-13 on EL9 for C++20 support
+%if 0%{?rhel} == 9
+. /opt/rh/gcc-toolset-13/enable
+%endif
 
 # Avoid picking up non-system Python, which makes later detection of
 # python libs and headers fail (since python3-devel package is specific
@@ -132,6 +141,11 @@ find %{buildroot} -name '*.la' -delete
 %{_mandir}/man5/*
 
 %changelog
+* Wed Jan 8 2026 Kush Gupta <kush-gupt@users.noreply.github.com> - 0.48.0-1
+- Update to flux-sched v0.48.0
+- Add gcc-toolset-13 for EL9 builds (requires GCC 12+)
+- Adapt spec for Fedora packaging
+
 * Mon Sep 8 2025 James Corbett <corbett8@llnl.gov> - 0.47.0-1
 - Bump release to flux-sched v0.47.0
 
