@@ -315,7 +315,7 @@ jobs:
         run: |
           mock -r fedora-41-x86_64 --init
           mock -r fedora-41-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
-          mock -r fedora-41-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-*.x86_64.rpm
+          mock -r fedora-41-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-[0-9]*.x86_64.rpm
           mock -r fedora-41-x86_64 --no-clean --rebuild srpms/flux-sched-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
@@ -348,7 +348,7 @@ jobs:
         run: |
           mock -r fedora-42-x86_64 --init
           mock -r fedora-42-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
-          mock -r fedora-42-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-*.x86_64.rpm
+          mock -r fedora-42-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-[0-9]*.x86_64.rpm
           mock -r fedora-42-x86_64 --no-clean --rebuild srpms/flux-sched-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
@@ -381,7 +381,7 @@ jobs:
         run: |
           mock -r centos-stream+epel-9-x86_64 --init
           mock -r centos-stream+epel-9-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
-          mock -r centos-stream+epel-9-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-*.x86_64.rpm
+          mock -r centos-stream+epel-9-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-[0-9]*.x86_64.rpm
           mock -r centos-stream+epel-9-x86_64 --no-clean --rebuild srpms/flux-sched-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
@@ -414,7 +414,7 @@ jobs:
         run: |
           mock -r centos-stream+epel-10-x86_64 --init
           mock -r centos-stream+epel-10-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
-          mock -r centos-stream+epel-10-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-*.x86_64.rpm
+          mock -r centos-stream+epel-10-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-[0-9]*.x86_64.rpm
           mock -r centos-stream+epel-10-x86_64 --no-clean --rebuild srpms/flux-sched-*.src.rpm --resultdir=results
       - uses: actions/upload-artifact@v4
         with:
