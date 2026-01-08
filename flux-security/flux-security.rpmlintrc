@@ -3,7 +3,8 @@
 # designed to execute privileged operations on behalf of Flux.
 # See: https://flux-framework.readthedocs.io/projects/flux-security/
 #
-# Note: These filters apply to built RPMs. When running rpmlint on only the
-# spec file, "unused-rpmlintrc-filter" warnings are expected and can be ignored.
+# These filters apply to built RPMs. When running rpmlint on only the spec file,
+# they won't match anything, so we also filter the "unused filter" warnings.
 addFilter("setuid-binary.*/usr/libexec/flux/flux-imp")
 addFilter("non-standard-executable-perm.*/usr/libexec/flux/flux-imp")
+addFilter("unused-rpmlintrc-filter.*flux-imp")
