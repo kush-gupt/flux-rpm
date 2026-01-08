@@ -12,12 +12,13 @@ Heavily assisted through Cursor IDE with Claude 4.5 Opus, but all code is review
 |---------|-------------|
 | [flux-security](https://github.com/flux-framework/flux-security) | Flux security components and IMP executable |
 | [flux-core](https://github.com/flux-framework/flux-core) | Flux resource manager core framework |
+| [flux-sched](https://github.com/flux-framework/flux-sched) | Fluxion graph-based scheduler |
 
 ## Build Status
 
 Testing against:
-- **Fedora**: 41, 42, Rawhide
-- **EPEL**: 9 (CentOS Stream)
+- **Fedora**: 41, 42, Rawhide (COPR)
+- **EPEL**: 9, 10 (CentOS Stream)
 
 ## Quick Start
 
@@ -31,6 +32,10 @@ sudo dnf install flux-security flux-security-devel
 # Then install flux-core
 sudo dnf copr enable Kushgupta/flux-core
 sudo dnf install flux-core
+
+# Finally install flux-sched (Fluxion scheduler)
+sudo dnf copr enable Kushgupta/flux-sched
+sudo dnf install flux-sched
 ```
 
 ### Build Locally
@@ -43,10 +48,12 @@ sudo usermod -a -G mock $USER
 # Build SRPMs
 ./scripts/build-srpm.sh all
 
-# Build with mock
+# Build with mock (in order: security -> core -> sched)
 mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-security-*.src.rpm
 mock -r fedora-41-x86_64 --install /var/lib/mock/fedora-41-x86_64/result/flux-security-*.rpm
 mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-core-*.src.rpm
+mock -r fedora-41-x86_64 --install /var/lib/mock/fedora-41-x86_64/result/flux-core-*.rpm
+mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-sched-*.src.rpm
 ```
 
 ## Automated Updates
@@ -85,6 +92,8 @@ flux-rpm/
 │   └── flux-core.spec
 ├── flux-security/
 │   └── flux-security.spec
+├── flux-sched/
+│   └── flux-sched.spec
 ├── scripts/
 │   ├── build-srpm.sh
 │   └── update-specs.sh
@@ -101,6 +110,7 @@ This repository uses **COPR's native SCM integration** to automatically build pa
 
 - **flux-security**: https://copr.fedorainfracloud.org/coprs/kushgupta/flux-security/
 - **flux-core**: https://copr.fedorainfracloud.org/coprs/kushgupta/flux-core/
+- **flux-sched**: https://copr.fedorainfracloud.org/coprs/kushgupta/flux-sched/
 
 ### How It Works
 
@@ -129,12 +139,8 @@ You can also manually upload SRPMs:
 # Upload to COPR
 copr-cli build kushgupta/flux-security ~/rpmbuild/SRPMS/flux-security-*.src.rpm
 copr-cli build kushgupta/flux-core ~/rpmbuild/SRPMS/flux-core-*.src.rpm
+copr-cli build kushgupta/flux-sched ~/rpmbuild/SRPMS/flux-sched-*.src.rpm
 ```
-
-## EPEL Considerations
-
-For EPEL 8/9/10, additional conditionals may be needed for dependency differences.
-
 ## License
 
 Same as Flux Framework: LGPL-3.0

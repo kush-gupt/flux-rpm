@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build SRPMs for flux-core and flux-security
+# Build SRPMs for flux-security, flux-core, and flux-sched
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -11,6 +11,7 @@ get_version() {
 
 FLUX_SECURITY_VERSION=$(get_version flux-security)
 FLUX_CORE_VERSION=$(get_version flux-core)
+FLUX_SCHED_VERSION=$(get_version flux-sched)
 
 log() { echo -e "\033[0;32m[INFO]\033[0m $1"; }
 die() { echo -e "\033[0;31m[ERROR]\033[0m $1" >&2; exit 1; }
@@ -33,6 +34,8 @@ build_srpm() {
     local pkg=$1
     log "Building SRPM for ${pkg}"
     cp "$REPO_DIR/${pkg}/${pkg}.spec" ~/rpmbuild/SPECS/
+    # Copy any patches if they exist
+    cp "$REPO_DIR/${pkg}"/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
     rpmbuild -bs ~/rpmbuild/SPECS/${pkg}.spec
 }
 
@@ -45,14 +48,20 @@ case "${1:-all}" in
         download_source flux-core "$FLUX_CORE_VERSION"
         build_srpm flux-core
         ;;
+    flux-sched)
+        download_source flux-sched "$FLUX_SCHED_VERSION"
+        build_srpm flux-sched
+        ;;
     all)
         download_source flux-security "$FLUX_SECURITY_VERSION"
         build_srpm flux-security
         download_source flux-core "$FLUX_CORE_VERSION"
         build_srpm flux-core
+        download_source flux-sched "$FLUX_SCHED_VERSION"
+        build_srpm flux-sched
         ;;
     -h|--help)
-        echo "Usage: $0 [flux-core|flux-security|all]"
+        echo "Usage: $0 [flux-security|flux-core|flux-sched|all]"
         exit 0
         ;;
     *)

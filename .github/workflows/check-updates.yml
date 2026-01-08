@@ -125,6 +125,62 @@ jobs:
             echo "No update available (current: $current)"
           fi
 
+  check-flux-sched:
+    name: Check flux-sched updates
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.check.outputs.new_version }}
+      current_version: ${{ steps.check.outputs.current_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get current version
+        id: current
+        run: |
+          version=$(grep '^Version:' flux-sched/flux-sched.spec | awk '{print $2}')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Get latest release
+        id: latest
+        run: |
+          response=$(curl -sf "https://api.github.com/repos/flux-framework/flux-sched/releases?per_page=1") || {
+            echo "Failed to fetch releases from GitHub API"
+            echo "version=" >> $GITHUB_OUTPUT
+            exit 0
+          }
+          version=$(echo "$response" | jq -r '.[0].tag_name // empty' | sed 's/^v//')
+          if [ -z "$version" ]; then
+            echo "Could not parse version from GitHub API response"
+            echo "version=" >> $GITHUB_OUTPUT
+          else
+            echo "Latest version: $version"
+            echo "version=$version" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for update
+        id: check
+        run: |
+          current="${{ steps.current.outputs.version }}"
+          latest="${{ steps.latest.outputs.version }}"
+          echo "current_version=$current" >> $GITHUB_OUTPUT
+
+          if [ -z "$current" ]; then
+            echo "::error::Could not determine current version from spec file"
+            exit 1
+          fi
+
+          if [ -z "$latest" ]; then
+            echo "::warning::Could not fetch latest version from GitHub API, skipping update check"
+            exit 0
+          fi
+
+          if [ "$current" != "$latest" ]; then
+            echo "new_version=$latest" >> $GITHUB_OUTPUT
+            echo "Update available: $current -> $latest"
+          else
+            echo "No update available (current: $current)"
+          fi
+
   # ============================================================
   # Update jobs (only run if new version detected)
   # ============================================================
@@ -133,8 +189,8 @@ jobs:
   check-container:
     name: Check container availability
     runs-on: ubuntu-latest
-    needs: [check-flux-security, check-flux-core]
-    if: needs.check-flux-security.outputs.new_version != '' || needs.check-flux-core.outputs.new_version != ''
+    needs: [check-flux-security, check-flux-core, check-flux-sched]
+    if: needs.check-flux-security.outputs.new_version != '' || needs.check-flux-core.outputs.new_version != '' || needs.check-flux-sched.outputs.new_version != ''
     outputs:
       image-to-use: ${{ steps.check.outputs.image }}
     steps:
@@ -413,4 +469,102 @@ jobs:
 
             Please review the spec file changes and ensure Fedora compatibility.
           branch: update-flux-core-${{ needs.check-flux-core.outputs.new_version }}
+          delete-branch: true
+
+  update-flux-sched:
+    name: Update flux-sched
+    needs: [check-flux-sched, check-container]
+    if: needs.check-flux-sched.outputs.new_version != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for SRPM availability
+        id: check-srpm
+        run: |
+          VERSION="${{ needs.check-flux-sched.outputs.new_version }}"
+          ASSETS=$(curl -s "https://api.github.com/repos/flux-framework/flux-sched/releases/tags/v${VERSION}")
+          SRPM_URL=$(echo "$ASSETS" | jq -r '.assets[] | select(.name | endswith(".src.rpm")) | .browser_download_url' | head -1)
+          if [ -n "$SRPM_URL" ] && [ "$SRPM_URL" != "null" ]; then
+            echo "has_srpm=true" >> $GITHUB_OUTPUT
+            echo "srpm_url=$SRPM_URL" >> $GITHUB_OUTPUT
+          else
+            echo "has_srpm=false" >> $GITHUB_OUTPUT
+            echo "::warning::No SRPM available for flux-sched v${VERSION}"
+          fi
+
+      - name: Create issue for manual update
+        if: steps.check-srpm.outputs.has_srpm == 'false'
+        uses: peter-evans/create-issue-from-file@v5
+        with:
+          title: "flux-sched ${{ needs.check-flux-sched.outputs.new_version }} available - manual update required"
+          content-filepath: /dev/stdin
+          labels: enhancement,flux-sched
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true
+
+      - name: Create issue content
+        if: steps.check-srpm.outputs.has_srpm == 'false'
+        run: |
+          cat << 'EOF'
+          A new version of flux-sched is available but no SRPM was found in the release.
+
+          **Current version:** ${{ needs.check-flux-sched.outputs.current_version }}
+          **New version:** ${{ needs.check-flux-sched.outputs.new_version }}
+
+          **Release:** https://github.com/flux-framework/flux-sched/releases/tag/v${{ needs.check-flux-sched.outputs.new_version }}
+
+          ## Manual Update Required
+
+          1. Update `flux-sched/flux-sched.spec`:
+             - Change `Version:` to `${{ needs.check-flux-sched.outputs.new_version }}`
+             - Add changelog entry
+             - Review any upstream changes that may affect the spec
+
+          2. Update `flux-sched/sources` with new tarball SHA256:
+             ```bash
+             curl -sL https://github.com/flux-framework/flux-sched/releases/download/v${{ needs.check-flux-sched.outputs.new_version }}/flux-sched-${{ needs.check-flux-sched.outputs.new_version }}.tar.gz | sha256sum
+             ```
+
+          3. Test the build locally before merging.
+          EOF
+
+      - name: Update spec version (if no SRPM)
+        if: steps.check-srpm.outputs.has_srpm == 'false'
+        run: |
+          VERSION="${{ needs.check-flux-sched.outputs.new_version }}"
+          CURRENT="${{ needs.check-flux-sched.outputs.current_version }}"
+          
+          # Update version in spec
+          sed -i "s/^Version:.*/Version: ${VERSION}/" flux-sched/flux-sched.spec
+          
+          # Get SHA256 of new tarball
+          SHA256=$(curl -sL "https://github.com/flux-framework/flux-sched/releases/download/v${VERSION}/flux-sched-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
+          
+          # Update sources file
+          echo "SHA256 (flux-sched-${VERSION}.tar.gz) = ${SHA256}" > flux-sched/sources
+
+      - name: Create Pull Request
+        if: steps.check-srpm.outputs.has_srpm == 'false'
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Update flux-sched to ${{ needs.check-flux-sched.outputs.new_version }}"
+          title: "Update flux-sched to ${{ needs.check-flux-sched.outputs.new_version }}"
+          body: |
+            Automated version bump for flux-sched from ${{ needs.check-flux-sched.outputs.current_version }} to ${{ needs.check-flux-sched.outputs.new_version }}.
+
+            Release: https://github.com/flux-framework/flux-sched/releases/tag/v${{ needs.check-flux-sched.outputs.new_version }}
+
+            ## ⚠️ Manual Review Required
+
+            No upstream SRPM was available, so only the version and source SHA were updated.
+            Please review:
+            - [ ] Check release notes for any spec file changes needed
+            - [ ] Verify BuildRequires are still correct
+            - [ ] Test build locally if possible
+            - [ ] Add changelog entry
+
+          branch: update-flux-sched-${{ needs.check-flux-sched.outputs.new_version }}
           delete-branch: true

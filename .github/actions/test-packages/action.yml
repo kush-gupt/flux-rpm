@@ -13,6 +13,10 @@ inputs:
     description: 'Path to flux-core build results'
     required: true
     default: 'results-core'
+  sched-results:
+    description: 'Path to flux-sched build results'
+    required: false
+    default: 'results-sched'
 
 runs:
   using: composite
@@ -29,6 +33,19 @@ runs:
         CORE_RPMS=$(ls ${{ inputs.core-results }}/flux-core*.x86_64.rpm ${{ inputs.core-results }}/python3-flux*.x86_64.rpm 2>/dev/null | grep -v debuginfo | grep -v debugsource)
         echo "Installing: $CORE_RPMS"
         mock -r ${{ inputs.mock-release }} --install $CORE_RPMS
+
+        echo "=== Installing flux-sched packages (if available) ==="
+        if [ -d "${{ inputs.sched-results }}" ]; then
+          SCHED_RPMS=$(ls ${{ inputs.sched-results }}/flux-sched*.x86_64.rpm 2>/dev/null | grep -v debuginfo | grep -v debugsource) || true
+          if [ -n "$SCHED_RPMS" ]; then
+            echo "Installing: $SCHED_RPMS"
+            mock -r ${{ inputs.mock-release }} --install $SCHED_RPMS
+          else
+            echo "No flux-sched packages found, skipping"
+          fi
+        else
+          echo "No sched-results directory, skipping flux-sched"
+        fi
 
     - name: Test flux-security - Package and library verification
       shell: bash
@@ -131,6 +148,41 @@ runs:
           cat /usr/lib/systemd/system/flux.service
         '
 
+    - name: Test flux-sched - Package verification
+      shell: bash
+      run: |
+        echo "=== flux-sched Verification ==="
+        mock -r ${{ inputs.mock-release }} --shell -- bash -c '
+          set -e
+          
+          # Check if flux-sched is installed
+          if ! rpm -q flux-sched > /dev/null 2>&1; then
+            echo "flux-sched not installed, skipping tests"
+            exit 0
+          fi
+          
+          echo "--- Package info ---"
+          rpm -qi flux-sched
+
+          echo ""
+          echo "--- Fluxion modules ---"
+          ls -la /usr/lib64/flux/modules/sched-fluxion-*.so
+
+          echo ""
+          echo "--- Fluxion libraries ---"
+          ls -la /usr/lib64/libfluxion-data.so* || echo "libfluxion-data not found"
+          ls -la /usr/lib64/libreapi_cli.so 2>/dev/null || ls -la /usr/lib64/flux/libreapi_cli.so 2>/dev/null || echo "libreapi_cli not found"
+
+          echo ""
+          echo "--- RC scripts ---"
+          ls -la /etc/flux/rc1.d/*fluxion* 2>/dev/null || echo "No rc1.d fluxion scripts"
+          ls -la /etc/flux/rc3.d/*fluxion* 2>/dev/null || echo "No rc3.d fluxion scripts"
+
+          echo ""
+          echo "--- Fluxion Python modules ---"
+          python3 -c "import fluxion; print(\"fluxion module loaded\")" 2>/dev/null || echo "No fluxion Python module (may be expected)"
+        '
+
     - name: Test integration - flux-security with flux-core
       shell: bash
       run: |
@@ -142,3 +194,26 @@ runs:
           ls -la /usr/libexec/flux/flux-imp
         '
 
+    - name: Test integration - flux-sched with flux-core
+      shell: bash
+      run: |
+        echo "=== Fluxion Integration Test ==="
+        mock -r ${{ inputs.mock-release }} --shell -- bash -c '
+          set -e
+          
+          # Check if flux-sched is installed
+          if ! rpm -q flux-sched > /dev/null 2>&1; then
+            echo "flux-sched not installed, skipping integration tests"
+            exit 0
+          fi
+          
+          echo "--- Fluxion modules loadable by flux ---"
+          ls /usr/lib64/flux/modules/sched-fluxion-*.so
+          
+          echo ""
+          echo "--- Check module dependencies ---"
+          for mod in /usr/lib64/flux/modules/sched-fluxion-*.so; do
+            echo "=== $mod ==="
+            ldd "$mod" | grep -E "not found" && echo "MISSING DEPS!" || echo "OK"
+          done
+        '

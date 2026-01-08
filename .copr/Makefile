@@ -26,6 +26,10 @@ srpm:
 		echo "Downloading flux-core source..."; \
 		curl -L -o ~/rpmbuild/SOURCES/$(PKGNAME)-$(VERSION).tar.gz \
 			https://github.com/flux-framework/flux-core/releases/download/v$(VERSION)/$(PKGNAME)-$(VERSION).tar.gz; \
+	elif [ "$(PKGNAME)" = "flux-sched" ]; then \
+		echo "Downloading flux-sched source..."; \
+		curl -L -o ~/rpmbuild/SOURCES/$(PKGNAME)-$(VERSION).tar.gz \
+			https://github.com/flux-framework/flux-sched/releases/download/v$(VERSION)/$(PKGNAME)-$(VERSION).tar.gz; \
 	fi
 	
 	# Copy spec file
