@@ -4,7 +4,8 @@
 # See: https://flux-framework.readthedocs.io/projects/flux-security/
 #
 # These filters apply to built RPMs. When running rpmlint on only the spec file,
-# they won't match anything, so we also filter the "unused filter" warnings.
+# they won't match anything. We set the badness to 0 so unused filters don't
+# count as errors during spec-only linting.
+setBadness('unused-rpmlintrc-filter', 0)
 addFilter("setuid-binary.*/usr/libexec/flux/flux-imp")
 addFilter("non-standard-executable-perm.*/usr/libexec/flux/flux-imp")
-addFilter("unused-rpmlintrc-filter.*flux-imp")
