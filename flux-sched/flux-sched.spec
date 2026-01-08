@@ -137,7 +137,7 @@ find %{buildroot} -name '*.la' -delete
 %{_mandir}/man5/*
 
 %changelog
-* Wed Jan 8 2026 Kush Gupta <kush-gupt@users.noreply.github.com> - 0.48.0-1
+* Wed Jan 7 2026 Kush Gupta <kush-gupt@users.noreply.github.com> - 0.48.0-1
 - Update to flux-sched v0.48.0
 - Add gcc-toolset-13 for EL9 builds (requires GCC 12+)
 - Adapt spec for Fedora packaging
