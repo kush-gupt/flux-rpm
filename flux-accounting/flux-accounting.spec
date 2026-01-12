@@ -76,8 +76,8 @@ find %{buildroot} -name '*.la' -delete
 %license DISCLAIMER.LLNS
 %doc README.md NEWS
 
-# Python fluxacct package
-%{python3_sitelib}/fluxacct
+# Python fluxacct package (uses sitearch due to native extensions)
+%{python3_sitearch}/fluxacct
 
 # priority plugin
 %{_libdir}/flux/job-manager/plugins/mf_priority.so
