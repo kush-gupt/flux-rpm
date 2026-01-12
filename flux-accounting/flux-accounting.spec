@@ -61,7 +61,9 @@ export LC_ALL=en_US.UTF-8
 %make_build
 
 %install
-%make_install
+# Disable automake's Python byte-compilation (uses deprecated 'imp' module)
+# rpm will handle byte-compilation automatically via brp-python-bytecompile
+%make_install am_cv_python_pyc_compile=:
 
 # Remove libtool archives
 find %{buildroot} -name '*.la' -delete
