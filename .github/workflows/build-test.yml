@@ -162,8 +162,8 @@ jobs:
           SECURITY_RPM=$(ls results-security/flux-security-[0-9]*.x86_64.rpm | head -1)
           SECURITY_DEVEL_RPM=$(ls results-security/flux-security-devel-*.x86_64.rpm | head -1)
           echo "Installing: $SECURITY_RPM $SECURITY_DEVEL_RPM"
-          # Disable root_cache to preserve chroot state from build
-          mock -r ${{ matrix.mock-release }} --disable-plugin=root_cache --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
+          # Use --no-clean to preserve chroot state from build
+          mock -r ${{ matrix.mock-release }} --no-clean --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
 
       # ============================================================
       # Build flux-core
@@ -171,7 +171,7 @@ jobs:
       - name: Build flux-core
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --disable-plugin=root_cache --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
+          mock -r ${{ matrix.mock-release }} --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
 
       - name: Install flux-core in mock
         run: |
@@ -179,8 +179,8 @@ jobs:
           CORE_DEVEL_RPM=$(ls results-core/flux-core-devel-*.x86_64.rpm | head -1)
           PYTHON_RPM=$(ls results-core/python3-flux-[0-9]*.x86_64.rpm | head -1)
           echo "Installing: $CORE_RPM $CORE_DEVEL_RPM $PYTHON_RPM"
-          # Disable root_cache to preserve chroot state from build
-          mock -r ${{ matrix.mock-release }} --disable-plugin=root_cache --install "$CORE_RPM" "$CORE_DEVEL_RPM" "$PYTHON_RPM"
+          # Use --no-clean to preserve chroot state from build
+          mock -r ${{ matrix.mock-release }} --no-clean --install "$CORE_RPM" "$CORE_DEVEL_RPM" "$PYTHON_RPM"
 
       # ============================================================
       # Build flux-sched and flux-accounting (both depend on core)
@@ -188,12 +188,12 @@ jobs:
       - name: Build flux-sched
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --disable-plugin=root_cache --no-clean --rebuild srpms/flux-sched-*.src.rpm --resultdir=results-sched 2>&1 | tee sched-build.log
+          mock -r ${{ matrix.mock-release }} --no-clean --rebuild srpms/flux-sched-*.src.rpm --resultdir=results-sched 2>&1 | tee sched-build.log
 
       - name: Build flux-accounting
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --disable-plugin=root_cache --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results-accounting 2>&1 | tee accounting-build.log
+          mock -r ${{ matrix.mock-release }} --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results-accounting 2>&1 | tee accounting-build.log
 
       # ============================================================
       # Generate summary and upload artifacts
