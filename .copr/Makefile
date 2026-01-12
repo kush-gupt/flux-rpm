@@ -30,6 +30,10 @@ srpm:
 		echo "Downloading flux-sched source..."; \
 		curl -L -o ~/rpmbuild/SOURCES/$(PKGNAME)-$(VERSION).tar.gz \
 			https://github.com/flux-framework/flux-sched/releases/download/v$(VERSION)/$(PKGNAME)-$(VERSION).tar.gz; \
+	elif [ "$(PKGNAME)" = "flux-accounting" ]; then \
+		echo "Downloading flux-accounting source..."; \
+		curl -L -o ~/rpmbuild/SOURCES/$(PKGNAME)-$(VERSION).tar.gz \
+			https://github.com/flux-framework/flux-accounting/releases/download/v$(VERSION)/$(PKGNAME)-$(VERSION).tar.gz; \
 	fi
 	
 	# Copy spec file

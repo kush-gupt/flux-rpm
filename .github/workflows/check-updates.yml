@@ -5,6 +5,11 @@ on:
     - cron: '0 6 * * *'  # Daily at 6 AM UTC
   workflow_dispatch:
 
+# Ensure only one update check runs at a time
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 env:
   # Use pre-built container for faster builds
   BUILDER_IMAGE: ghcr.io/${{ github.repository }}/flux-rpm-builder:latest
@@ -181,6 +186,62 @@ jobs:
             echo "No update available (current: $current)"
           fi
 
+  check-flux-accounting:
+    name: Check flux-accounting updates
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.check.outputs.new_version }}
+      current_version: ${{ steps.check.outputs.current_version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get current version
+        id: current
+        run: |
+          version=$(grep '^Version:' flux-accounting/flux-accounting.spec | awk '{print $2}')
+          echo "version=$version" >> $GITHUB_OUTPUT
+
+      - name: Get latest release
+        id: latest
+        run: |
+          response=$(curl -sf "https://api.github.com/repos/flux-framework/flux-accounting/releases?per_page=1") || {
+            echo "Failed to fetch releases from GitHub API"
+            echo "version=" >> $GITHUB_OUTPUT
+            exit 0
+          }
+          version=$(echo "$response" | jq -r '.[0].tag_name // empty' | sed 's/^v//')
+          if [ -z "$version" ]; then
+            echo "Could not parse version from GitHub API response"
+            echo "version=" >> $GITHUB_OUTPUT
+          else
+            echo "Latest version: $version"
+            echo "version=$version" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for update
+        id: check
+        run: |
+          current="${{ steps.current.outputs.version }}"
+          latest="${{ steps.latest.outputs.version }}"
+          echo "current_version=$current" >> $GITHUB_OUTPUT
+
+          if [ -z "$current" ]; then
+            echo "::error::Could not determine current version from spec file"
+            exit 1
+          fi
+
+          if [ -z "$latest" ]; then
+            echo "::warning::Could not fetch latest version from GitHub API, skipping update check"
+            exit 0
+          fi
+
+          if [ "$current" != "$latest" ]; then
+            echo "new_version=$latest" >> $GITHUB_OUTPUT
+            echo "Update available: $current -> $latest"
+          else
+            echo "No update available (current: $current)"
+          fi
+
   # ============================================================
   # Update jobs (only run if new version detected)
   # ============================================================
@@ -189,8 +250,8 @@ jobs:
   check-container:
     name: Check container availability
     runs-on: ubuntu-latest
-    needs: [check-flux-security, check-flux-core, check-flux-sched]
-    if: needs.check-flux-security.outputs.new_version != '' || needs.check-flux-core.outputs.new_version != '' || needs.check-flux-sched.outputs.new_version != ''
+    needs: [check-flux-security, check-flux-core, check-flux-sched, check-flux-accounting]
+    if: needs.check-flux-security.outputs.new_version != '' || needs.check-flux-core.outputs.new_version != '' || needs.check-flux-sched.outputs.new_version != '' || needs.check-flux-accounting.outputs.new_version != ''
     outputs:
       image-to-use: ${{ steps.check.outputs.image }}
     steps:
@@ -567,4 +628,62 @@ jobs:
             - [ ] Add changelog entry
 
           branch: update-flux-sched-${{ needs.check-flux-sched.outputs.new_version }}
+          delete-branch: true
+
+  update-flux-accounting:
+    name: Update flux-accounting
+    needs: [check-flux-accounting, check-container]
+    if: needs.check-flux-accounting.outputs.new_version != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for SRPM availability
+        id: check-srpm
+        run: |
+          VERSION="${{ needs.check-flux-accounting.outputs.new_version }}"
+          ASSETS=$(curl -s "https://api.github.com/repos/flux-framework/flux-accounting/releases/tags/v${VERSION}")
+          SRPM_URL=$(echo "$ASSETS" | jq -r '.assets[] | select(.name | endswith(".src.rpm")) | .browser_download_url' | head -1)
+          if [ -n "$SRPM_URL" ] && [ "$SRPM_URL" != "null" ]; then
+            echo "has_srpm=true" >> $GITHUB_OUTPUT
+            echo "srpm_url=$SRPM_URL" >> $GITHUB_OUTPUT
+          else
+            echo "has_srpm=false" >> $GITHUB_OUTPUT
+            echo "::warning::No SRPM available for flux-accounting v${VERSION}"
+          fi
+
+      - name: Update spec version
+        run: |
+          VERSION="${{ needs.check-flux-accounting.outputs.new_version }}"
+          CURRENT="${{ needs.check-flux-accounting.outputs.current_version }}"
+          
+          # Update version in spec
+          sed -i "s/^Version:.*/Version: ${VERSION}/" flux-accounting/flux-accounting.spec
+          
+          # Get SHA256 of new tarball
+          SHA256=$(curl -sL "https://github.com/flux-framework/flux-accounting/releases/download/v${VERSION}/flux-accounting-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
+          
+          # Update sources file
+          echo "SHA256 (flux-accounting-${VERSION}.tar.gz) = ${SHA256}" > flux-accounting/sources
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Update flux-accounting to ${{ needs.check-flux-accounting.outputs.new_version }}"
+          title: "Update flux-accounting to ${{ needs.check-flux-accounting.outputs.new_version }}"
+          body: |
+            Automated version bump for flux-accounting from ${{ needs.check-flux-accounting.outputs.current_version }} to ${{ needs.check-flux-accounting.outputs.new_version }}.
+
+            Release: https://github.com/flux-framework/flux-accounting/releases/tag/v${{ needs.check-flux-accounting.outputs.new_version }}
+
+            ## Review Notes
+
+            Please review:
+            - [ ] Check release notes for any spec file changes needed
+            - [ ] Verify BuildRequires are still correct
+            - [ ] Test build locally if possible
+            - [ ] Add changelog entry
+
+          branch: update-flux-accounting-${{ needs.check-flux-accounting.outputs.new_version }}
           delete-branch: true

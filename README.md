@@ -13,6 +13,7 @@ Heavily assisted through Cursor IDE with Claude 4.5 Opus, but all code is review
 | [flux-security](https://github.com/flux-framework/flux-security) | Flux security components and IMP executable |
 | [flux-core](https://github.com/flux-framework/flux-core) | Flux resource manager core framework |
 | [flux-sched](https://github.com/flux-framework/flux-sched) | Fluxion graph-based scheduler |
+| [flux-accounting](https://github.com/flux-framework/flux-accounting) | Bank/accounting interface for job priorities and fairshare |
 
 ## Build Status
 
@@ -36,6 +37,10 @@ sudo dnf install flux-core
 # Finally install flux-sched (Fluxion scheduler)
 sudo dnf copr enable Kushgupta/flux-sched
 sudo dnf install flux-sched
+
+# Optional: install flux-accounting (bank/accounting)
+sudo dnf copr enable Kushgupta/flux-accounting
+sudo dnf install flux-accounting
 ```
 
 ### Build Locally
@@ -48,12 +53,13 @@ sudo usermod -a -G mock $USER
 # Build SRPMs
 ./scripts/build-srpm.sh all
 
-# Build with mock (in order: security -> core -> sched)
+# Build with mock (in order: security -> core -> sched/accounting)
 mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-security-*.src.rpm
 mock -r fedora-41-x86_64 --install /var/lib/mock/fedora-41-x86_64/result/flux-security-*.rpm
 mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-core-*.src.rpm
 mock -r fedora-41-x86_64 --install /var/lib/mock/fedora-41-x86_64/result/flux-core-*.rpm
 mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-sched-*.src.rpm
+mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-accounting-*.src.rpm
 ```
 
 ## Automated Updates
@@ -94,6 +100,8 @@ flux-rpm/
 │   └── flux-security.spec
 ├── flux-sched/
 │   └── flux-sched.spec
+├── flux-accounting/
+│   └── flux-accounting.spec
 ├── scripts/
 │   ├── build-srpm.sh
 │   └── update-specs.sh
@@ -111,6 +119,7 @@ This repository uses **COPR's native SCM integration** to automatically build pa
 - **flux-security**: https://copr.fedorainfracloud.org/coprs/kushgupta/flux-security/
 - **flux-core**: https://copr.fedorainfracloud.org/coprs/kushgupta/flux-core/
 - **flux-sched**: https://copr.fedorainfracloud.org/coprs/kushgupta/flux-sched/
+- **flux-accounting**: https://copr.fedorainfracloud.org/coprs/kushgupta/flux-accounting/
 
 ### How It Works
 
@@ -140,6 +149,7 @@ You can also manually upload SRPMs:
 copr-cli build kushgupta/flux-security ~/rpmbuild/SRPMS/flux-security-*.src.rpm
 copr-cli build kushgupta/flux-core ~/rpmbuild/SRPMS/flux-core-*.src.rpm
 copr-cli build kushgupta/flux-sched ~/rpmbuild/SRPMS/flux-sched-*.src.rpm
+copr-cli build kushgupta/flux-accounting ~/rpmbuild/SRPMS/flux-accounting-*.src.rpm
 ```
 ## License
 

@@ -34,6 +34,33 @@ This document describes the changes made to upstream LLNL spec files for Fedora 
 | Changelog format | `0.81.0-1` (no hyphen before version) | `- 0.81.0-1` (hyphen before version) | Fedora changelog format |
 | Summary (flux-security) | "Flux Resource Manager Framework" | "Flux Framework Security Components" | More accurate description |
 
+## Package-Specific Notes
+
+### flux-accounting
+
+The `flux-accounting` package was added to this repository based on the upstream SRPM from GitHub releases (v0.51.0). The following additional adaptations were required:
+
+| Change | Upstream | Fedora | Reason |
+|--------|----------|--------|--------|
+| License tag | `GPLv3+` | `LGPL-3.0-only` | SPDX identifier required (Fedora 40+) |
+| Python path | `%{_libdir}/python3.6/*` | `%{python3_sitelib}/fluxacct` | Portable Python site-packages |
+| Python hardcoding | `python3.6` paths | `python%{python3_version}` | Fedora Python packaging guidelines |
+| BuildRequires | `python36` | `python3` | Fedora Python packaging |
+| BuildRequires | `python3-six` | Removed | Not needed |
+| BuildRequires | `python3-jsonschema` | Removed | Build-time only |
+| Debug packages | Disabled | Enabled (default) | Fedora policy |
+| Sphinx docs | `pip3 install --user` | Packaged sphinx | Mock builds have no network access |
+| C++ support | Implicit | Explicit `gcc-c++` | flux-accounting uses C++ for plugins |
+| Requires | `sqlite3` | `sqlite >= 3.6.0` | Correct package name |
+| Runtime deps | Missing | `python3-flux`, `python3`, `python3-cffi`, `python3-pyyaml` | Explicit runtime dependencies |
+
+flux-accounting requires flux-core at both build time and runtime since it provides a flux plugin (mf_priority.so) and uses the flux Python bindings. The build order is:
+
+1. flux-security
+2. flux-core
+3. flux-sched (can build parallel with flux-accounting)
+4. flux-accounting (can build parallel with flux-sched)
+
 ## Detailed Changes
 
 ### 1. License Tag (Required)
@@ -357,7 +384,7 @@ Suppresses error output if systemctl is not available.
 
 ## Current Spec File Compliance Status
 
-Both `flux-core.spec` and `flux-security.spec` in this repository implement:
+All spec files in this repository (`flux-security.spec`, `flux-core.spec`, `flux-sched.spec`, and `flux-accounting.spec`) implement:
 
 | Requirement | Status | Notes |
 |-------------|--------|-------|

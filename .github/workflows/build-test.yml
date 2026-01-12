@@ -7,6 +7,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Cancel in-progress runs when a new run is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   BUILDER_IMAGE: ghcr.io/${{ github.repository }}/flux-rpm-builder:latest
 
@@ -24,6 +29,7 @@ jobs:
           rpmlint flux-security/flux-security.spec || true
           rpmlint flux-core/flux-core.spec || true
           rpmlint flux-sched/flux-sched.spec || true
+          rpmlint flux-accounting/flux-accounting.spec || true
 
   # Check container availability (fast, parallel)
   check-container:
@@ -57,6 +63,7 @@ jobs:
           SEC_VER=$(grep '^Version:' flux-security/flux-security.spec | awk '{print $2}')
           CORE_VER=$(grep '^Version:' flux-core/flux-core.spec | awk '{print $2}')
           SCHED_VER=$(grep '^Version:' flux-sched/flux-sched.spec | awk '{print $2}')
+          ACCT_VER=$(grep '^Version:' flux-accounting/flux-accounting.spec | awk '{print $2}')
           
           # Download sources in parallel
           wget -q -O ~/rpmbuild/SOURCES/flux-security-${SEC_VER}.tar.gz \
@@ -65,20 +72,25 @@ jobs:
             https://github.com/flux-framework/flux-core/releases/download/v${CORE_VER}/flux-core-${CORE_VER}.tar.gz &
           wget -q -O ~/rpmbuild/SOURCES/flux-sched-${SCHED_VER}.tar.gz \
             https://github.com/flux-framework/flux-sched/releases/download/v${SCHED_VER}/flux-sched-${SCHED_VER}.tar.gz &
+          wget -q -O ~/rpmbuild/SOURCES/flux-accounting-${ACCT_VER}.tar.gz \
+            https://github.com/flux-framework/flux-accounting/releases/download/v${ACCT_VER}/flux-accounting-${ACCT_VER}.tar.gz &
           wait
           
           # Copy specs and patches
           cp flux-security/flux-security.spec ~/rpmbuild/SPECS/
           cp flux-core/flux-core.spec ~/rpmbuild/SPECS/
           cp flux-sched/flux-sched.spec ~/rpmbuild/SPECS/
+          cp flux-accounting/flux-accounting.spec ~/rpmbuild/SPECS/
           cp flux-security/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
           cp flux-core/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
           cp flux-sched/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
+          cp flux-accounting/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
           
           # Build SRPMs
           rpmbuild -bs ~/rpmbuild/SPECS/flux-security.spec
           rpmbuild -bs ~/rpmbuild/SPECS/flux-core.spec
           rpmbuild -bs ~/rpmbuild/SPECS/flux-sched.spec
+          rpmbuild -bs ~/rpmbuild/SPECS/flux-accounting.spec
           
           # Move to workspace for upload
           mkdir -p srpms
@@ -423,6 +435,143 @@ jobs:
         if: always()
         with:
           name: rpms-sched-el10
+          path: results/
+      - if: always()
+        run: mock -r centos-stream+epel-10-x86_64 --clean
+
+  # flux-accounting builds (wait for matching core, parallel with sched)
+  mock-accounting-fedora-41:
+    name: accounting (f41)
+    runs-on: ubuntu-latest
+    needs: [build-srpms, check-container, mock-core-fedora-41]
+    container:
+      image: ${{ needs.check-container.outputs.image }}
+      options: --privileged
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: srpms
+          path: ./srpms
+      - uses: actions/download-artifact@v4
+        with:
+          name: rpms-security-f41
+          path: ./security
+      - uses: actions/download-artifact@v4
+        with:
+          name: rpms-core-f41
+          path: ./core
+      - name: Build
+        run: |
+          mock -r fedora-41-x86_64 --init
+          mock -r fedora-41-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
+          mock -r fedora-41-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-[0-9]*.x86_64.rpm
+          mock -r fedora-41-x86_64 --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rpms-accounting-f41
+          path: results/
+      - if: always()
+        run: mock -r fedora-41-x86_64 --clean
+
+  mock-accounting-fedora-42:
+    name: accounting (f42)
+    runs-on: ubuntu-latest
+    needs: [build-srpms, check-container, mock-core-fedora-42]
+    container:
+      image: ${{ needs.check-container.outputs.image }}
+      options: --privileged
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: srpms
+          path: ./srpms
+      - uses: actions/download-artifact@v4
+        with:
+          name: rpms-security-f42
+          path: ./security
+      - uses: actions/download-artifact@v4
+        with:
+          name: rpms-core-f42
+          path: ./core
+      - name: Build
+        run: |
+          mock -r fedora-42-x86_64 --init
+          mock -r fedora-42-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
+          mock -r fedora-42-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-[0-9]*.x86_64.rpm
+          mock -r fedora-42-x86_64 --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rpms-accounting-f42
+          path: results/
+      - if: always()
+        run: mock -r fedora-42-x86_64 --clean
+
+  mock-accounting-centos-9:
+    name: accounting (el9)
+    runs-on: ubuntu-latest
+    needs: [build-srpms, check-container, mock-core-centos-9]
+    container:
+      image: ${{ needs.check-container.outputs.image }}
+      options: --privileged
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: srpms
+          path: ./srpms
+      - uses: actions/download-artifact@v4
+        with:
+          name: rpms-security-el9
+          path: ./security
+      - uses: actions/download-artifact@v4
+        with:
+          name: rpms-core-el9
+          path: ./core
+      - name: Build
+        run: |
+          mock -r centos-stream+epel-9-x86_64 --init
+          mock -r centos-stream+epel-9-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
+          mock -r centos-stream+epel-9-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-[0-9]*.x86_64.rpm
+          mock -r centos-stream+epel-9-x86_64 --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rpms-accounting-el9
+          path: results/
+      - if: always()
+        run: mock -r centos-stream+epel-9-x86_64 --clean
+
+  mock-accounting-centos-10:
+    name: accounting (el10)
+    runs-on: ubuntu-latest
+    needs: [build-srpms, check-container, mock-core-centos-10]
+    container:
+      image: ${{ needs.check-container.outputs.image }}
+      options: --privileged
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: srpms
+          path: ./srpms
+      - uses: actions/download-artifact@v4
+        with:
+          name: rpms-security-el10
+          path: ./security
+      - uses: actions/download-artifact@v4
+        with:
+          name: rpms-core-el10
+          path: ./core
+      - name: Build
+        run: |
+          mock -r centos-stream+epel-10-x86_64 --init
+          mock -r centos-stream+epel-10-x86_64 --install security/flux-security-[0-9]*.x86_64.rpm security/flux-security-devel-*.x86_64.rpm
+          mock -r centos-stream+epel-10-x86_64 --install core/flux-core-[0-9]*.x86_64.rpm core/flux-core-devel-*.x86_64.rpm core/python3-flux-[0-9]*.x86_64.rpm
+          mock -r centos-stream+epel-10-x86_64 --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rpms-accounting-el10
           path: results/
       - if: always()
         run: mock -r centos-stream+epel-10-x86_64 --clean
