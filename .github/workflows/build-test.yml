@@ -162,9 +162,8 @@ jobs:
           SECURITY_RPM=$(ls results-security/flux-security-[0-9]*.x86_64.rpm | head -1)
           SECURITY_DEVEL_RPM=$(ls results-security/flux-security-devel-*.x86_64.rpm | head -1)
           echo "Installing: $SECURITY_RPM $SECURITY_DEVEL_RPM"
-          # Copy RPMs into the mock chroot and install them without resetting
-          mock -r ${{ matrix.mock-release }} --copyin "$SECURITY_RPM" "$SECURITY_DEVEL_RPM" /tmp/
-          mock -r ${{ matrix.mock-release }} --shell -- bash -c 'dnf install -y /tmp/flux-security-*.rpm || rpm -ivh /tmp/flux-security-*.rpm'
+          # Disable root_cache to preserve chroot state from build
+          mock -r ${{ matrix.mock-release }} --plugin-option=root_cache:enabled=False --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
 
       # ============================================================
       # Build flux-core
@@ -172,7 +171,7 @@ jobs:
       - name: Build flux-core
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
+          mock -r ${{ matrix.mock-release }} --plugin-option=root_cache:enabled=False --no-clean --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
 
       - name: Install flux-core in mock
         run: |
@@ -180,22 +179,21 @@ jobs:
           CORE_DEVEL_RPM=$(ls results-core/flux-core-devel-*.x86_64.rpm | head -1)
           PYTHON_RPM=$(ls results-core/python3-flux-[0-9]*.x86_64.rpm | head -1)
           echo "Installing: $CORE_RPM $CORE_DEVEL_RPM $PYTHON_RPM"
-          # Copy RPMs into the mock chroot and install them without resetting
-          mock -r ${{ matrix.mock-release }} --copyin "$CORE_RPM" "$CORE_DEVEL_RPM" "$PYTHON_RPM" /tmp/
-          mock -r ${{ matrix.mock-release }} --shell -- bash -c 'dnf install -y /tmp/flux-core*.rpm /tmp/python3-flux*.rpm || rpm -ivh /tmp/flux-core*.rpm /tmp/python3-flux*.rpm'
+          # Disable root_cache to preserve chroot state from build
+          mock -r ${{ matrix.mock-release }} --plugin-option=root_cache:enabled=False --install "$CORE_RPM" "$CORE_DEVEL_RPM" "$PYTHON_RPM"
 
       # ============================================================
-      # Build flux-sched and flux-accounting in parallel (both depend on core)
+      # Build flux-sched and flux-accounting (both depend on core)
       # ============================================================
       - name: Build flux-sched
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --no-clean --rebuild srpms/flux-sched-*.src.rpm --resultdir=results-sched 2>&1 | tee sched-build.log
+          mock -r ${{ matrix.mock-release }} --plugin-option=root_cache:enabled=False --no-clean --rebuild srpms/flux-sched-*.src.rpm --resultdir=results-sched 2>&1 | tee sched-build.log
 
       - name: Build flux-accounting
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results-accounting 2>&1 | tee accounting-build.log
+          mock -r ${{ matrix.mock-release }} --plugin-option=root_cache:enabled=False --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results-accounting 2>&1 | tee accounting-build.log
 
       # ============================================================
       # Generate summary and upload artifacts
