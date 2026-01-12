@@ -162,7 +162,9 @@ jobs:
           SECURITY_RPM=$(ls results-security/flux-security-[0-9]*.x86_64.rpm | head -1)
           SECURITY_DEVEL_RPM=$(ls results-security/flux-security-devel-*.x86_64.rpm | head -1)
           echo "Installing: $SECURITY_RPM $SECURITY_DEVEL_RPM"
-          mock -r ${{ matrix.mock-release }} --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
+          # Copy RPMs into the mock chroot and install them without resetting
+          mock -r ${{ matrix.mock-release }} --copyin "$SECURITY_RPM" "$SECURITY_DEVEL_RPM" /tmp/
+          mock -r ${{ matrix.mock-release }} --shell -- bash -c 'dnf install -y /tmp/flux-security-*.rpm || rpm -ivh /tmp/flux-security-*.rpm'
 
       # ============================================================
       # Build flux-core
@@ -178,7 +180,9 @@ jobs:
           CORE_DEVEL_RPM=$(ls results-core/flux-core-devel-*.x86_64.rpm | head -1)
           PYTHON_RPM=$(ls results-core/python3-flux-[0-9]*.x86_64.rpm | head -1)
           echo "Installing: $CORE_RPM $CORE_DEVEL_RPM $PYTHON_RPM"
-          mock -r ${{ matrix.mock-release }} --install "$CORE_RPM" "$CORE_DEVEL_RPM" "$PYTHON_RPM"
+          # Copy RPMs into the mock chroot and install them without resetting
+          mock -r ${{ matrix.mock-release }} --copyin "$CORE_RPM" "$CORE_DEVEL_RPM" "$PYTHON_RPM" /tmp/
+          mock -r ${{ matrix.mock-release }} --shell -- bash -c 'dnf install -y /tmp/flux-core*.rpm /tmp/python3-flux*.rpm || rpm -ivh /tmp/flux-core*.rpm /tmp/python3-flux*.rpm'
 
       # ============================================================
       # Build flux-sched and flux-accounting in parallel (both depend on core)
