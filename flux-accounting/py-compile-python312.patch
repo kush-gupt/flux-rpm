@@ -1,0 +1,93 @@
+From: Kushal Gupta <kugupta@redhat.com>
+Date: Sun, 11 Jan 2026 00:00:00 +0000
+Subject: [PATCH] py-compile: Fix Python 3.12+ compatibility
+
+The 'imp' module was deprecated in Python 3.4 (PEP 451) and removed
+entirely in Python 3.12 (PEP 594). This causes byte-compilation to
+fail with "ModuleNotFoundError: No module named 'imp'" on systems
+with Python 3.12+.
+
+Replace 'imp' usage with 'importlib.util' which provides the same
+functionality (cache_from_source) and has been available since
+Python 3.4. Maintain backwards compatibility with older Python
+versions by falling back to the legacy .pyc/.pyo naming scheme.
+
+This is a backport of the fix from automake 1.16.5+.
+
+Upstream-Status: Backport [automake]
+Signed-off-by: Kushal Gupta <kugupta@redhat.com>
+---
+ config/py-compile | 36 +++++++++++++++++++++++++++---------
+ 1 file changed, 27 insertions(+), 9 deletions(-)
+
+diff --git a/config/py-compile b/config/py-compile
+--- a/config/py-compile
++++ b/config/py-compile
+@@ -1,7 +1,7 @@
+ #!/bin/sh
+ # py-compile - Compile a Python program
+ 
+-scriptversion=2018-03-07.03; # UTC
++scriptversion=2024-01-11.00; # UTC
+ 
+ # Copyright (C) 2000-2018 Free Software Foundation, Inc.
+ 
+@@ -116,8 +116,16 @@ else
+ fi
+ 
+ $PYTHON -c "
+-import sys, os, py_compile, imp
++import sys, os, py_compile
+ 
++# importlib.util.cache_from_source was added in Python 3.4
++# imp module was removed in Python 3.12 (PEP 594)
++try:
++    from importlib.util import cache_from_source
++    has_cache_from_source = True
++except ImportError:
++    has_cache_from_source = False
++
+ files = '''$files'''
+ 
+ sys.stdout.write('Byte-compiling python modules...\n')
+@@ -129,16 +137,24 @@ for file in files.split():
+ 	    continue
+     sys.stdout.write(file)
+     sys.stdout.flush()
+-    if hasattr(imp, 'get_tag'):
+-        py_compile.compile(filepath, imp.cache_from_source(filepath), path)
++    if has_cache_from_source:
++        py_compile.compile(filepath, cache_from_source(filepath), path)
+     else:
+         py_compile.compile(filepath, filepath + 'c', path)
+ sys.stdout.write('\n')" || exit $?
+ 
+ # this will fail for python < 1.5, but that doesn't matter ...
+ $PYTHON -O -c "
+-import sys, os, py_compile, imp
++import sys, os, py_compile
+ 
++# importlib.util.cache_from_source was added in Python 3.4
++# imp module was removed in Python 3.12 (PEP 594)
++try:
++    from importlib.util import cache_from_source
++    has_cache_from_source = True
++except ImportError:
++    has_cache_from_source = False
++
+ # pypy does not use .pyo optimization
+ if hasattr(sys, 'pypy_translation_info'):
+     sys.exit(0)
+@@ -153,8 +169,8 @@ for file in files.split():
+ 	    continue
+     sys.stdout.write(file)
+     sys.stdout.flush()
+-    if hasattr(imp, 'get_tag'):
+-        py_compile.compile(filepath, imp.cache_from_source(filepath, False), path)
++    if has_cache_from_source:
++        py_compile.compile(filepath, cache_from_source(filepath, optimization=1), path)
+     else:
+         py_compile.compile(filepath, filepath + 'o', path)
+ sys.stdout.write('\n')" 2>/dev/null || :
+-- 
+2.43.0

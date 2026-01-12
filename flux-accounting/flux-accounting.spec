@@ -6,6 +6,10 @@ License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-accounting
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 
+# Python 3.12+ compatibility: imp module was removed (PEP 594)
+# Backport of automake 1.16.5+ fix for py-compile
+Patch0:  py-compile-python312.patch
+
 BuildRequires: pkgconfig(jansson) >= 2.10
 BuildRequires: pkgconfig(sqlite3)
 BuildRequires: python3
@@ -53,10 +57,6 @@ interact with this database.
 
 %build
 export LC_ALL=en_US.UTF-8
-
-# Regenerate autotools to fix Python 3.12+ compatibility
-# (upstream py-compile uses deprecated 'imp' module removed in Python 3.12)
-autoreconf -fi
 
 %configure \
     --with-systemdsystemunitdir=%{_unitdir} \
