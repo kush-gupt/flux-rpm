@@ -58,12 +58,15 @@ export LC_ALL=en_US.UTF-8
     --with-systemdsystemunitdir=%{_unitdir} \
     --disable-static
 
+# Fix automake's Python byte-compilation (uses deprecated 'imp' module removed in Python 3.12)
+# Replace the py_compile call with a no-op in all Makefiles
+# rpm will handle byte-compilation automatically via brp-python-bytecompile
+find . -name Makefile -exec sed -i 's|$(py_compile) --destdir|: # disabled py_compile|g' {} \;
+
 %make_build
 
 %install
-# Disable automake's Python byte-compilation (uses deprecated 'imp' module)
-# rpm will handle byte-compilation automatically via brp-python-bytecompile
-%make_install am_cv_python_pyc_compile=:
+%make_install
 
 # Remove libtool archives
 find %{buildroot} -name '*.la' -delete
