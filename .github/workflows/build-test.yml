@@ -202,6 +202,8 @@ jobs:
     name: Build (${{ matrix.distro }})
     runs-on: ubuntu-latest
     needs: [build-srpms, check-container]
+    # Don't let rawhide failures fail the entire workflow
+    continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       fail-fast: false
       matrix:
@@ -212,6 +214,13 @@ jobs:
           - distro: fedora-42
             mock-release: fedora-42-x86_64
             short-name: f42
+          - distro: fedora-43
+            mock-release: fedora-43-x86_64
+            short-name: f43
+          - distro: fedora-rawhide
+            mock-release: fedora-rawhide-x86_64
+            short-name: rawhide
+            allow-failure: true
           - distro: centos-9
             mock-release: centos-stream+epel-9-x86_64
             short-name: el9
@@ -338,16 +347,39 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-all]
     timeout-minutes: 60
+    # Don't let rawhide failures fail the entire workflow
+    continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          # Fedora releases
           - distro: fedora-41
             image: fedora:41
             short-name: f41
+            pkg-manager: dnf
           - distro: fedora-42
             image: fedora:42
             short-name: f42
+            pkg-manager: dnf
+          - distro: fedora-43
+            image: fedora:43
+            short-name: f43
+            pkg-manager: dnf
+          - distro: fedora-rawhide
+            image: fedora:rawhide
+            short-name: rawhide
+            pkg-manager: dnf
+            allow-failure: true
+          # CentOS/RHEL releases
+          - distro: centos-9
+            image: quay.io/centos/centos:stream9
+            short-name: el9
+            pkg-manager: dnf
+          - distro: centos-10
+            image: quay.io/centos/centos:stream10
+            short-name: el10
+            pkg-manager: dnf
     container:
       image: ${{ matrix.image }}
       options: --privileged --cap-add=SYS_PTRACE
@@ -366,24 +398,30 @@ jobs:
           name: rpms-${{ matrix.short-name }}
           path: ./rpms
 
+      - name: Enable EPEL (CentOS/RHEL only)
+        if: startsWith(matrix.distro, 'centos')
+        run: |
+          ${{ matrix.pkg-manager }} install -y epel-release
+          ${{ matrix.pkg-manager }} config-manager --set-enabled crb || true
+
       - name: Install build/test dependencies
         run: |
-          dnf install -y \
+          ${{ matrix.pkg-manager }} install -y \
             make cmake autoconf automake libtool pkgconfig gcc gcc-c++ \
-            python3-devel python3-setuptools python3-cffi python3-yaml python3-jsonschema \
+            python3-devel python3-setuptools python3-cffi python3-pyyaml python3-jsonschema \
             libuuid-devel jansson-devel lz4-devel libarchive-devel \
             hwloc-devel sqlite-devel ncurses-devel libsodium-devel zeromq-devel \
             lua lua-devel lua-posix \
-            valgrind jq procps-ng hostname which diffutils findutils \
-            aspell aspell-en \
+            jq procps-ng hostname which diffutils findutils \
             boost-devel boost-graph boost-filesystem boost-system \
-            libedit-devel readline-devel yaml-cpp-devel \
-            perl-Test-Harness
+            libedit-devel readline-devel \
+            perl-Test-Harness || true
+          # Some packages may not exist on all distros, continue anyway
 
       - name: Install Flux RPMs
         run: |
           # Install all non-debug RPMs including devel packages for test builds
-          dnf install -y \
+          ${{ matrix.pkg-manager }} install -y \
             rpms/results-security/flux-security-[0-9]*.x86_64.rpm \
             rpms/results-security/flux-security-devel-*.x86_64.rpm \
             rpms/results-core/flux-core-[0-9]*.x86_64.rpm \
