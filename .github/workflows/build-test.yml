@@ -406,17 +406,22 @@ jobs:
 
       - name: Install build/test dependencies
         run: |
+          # Essential build tools - must succeed
           ${{ matrix.pkg-manager }} install -y \
-            make cmake autoconf automake libtool pkgconfig gcc gcc-c++ \
-            python3-devel python3-setuptools python3-cffi python3-pyyaml python3-jsonschema \
+            make autoconf automake libtool gcc gcc-c++ \
+            python3-devel python3-setuptools \
+            curl tar gzip jq procps-ng hostname which diffutils findutils \
+            perl-Test-Harness
+          
+          # Additional dependencies - some may not exist on all distros
+          ${{ matrix.pkg-manager }} install -y \
+            cmake pkgconfig \
+            python3-cffi python3-pyyaml python3-jsonschema \
             libuuid-devel jansson-devel lz4-devel libarchive-devel \
             hwloc-devel sqlite-devel ncurses-devel libsodium-devel zeromq-devel \
             lua lua-devel lua-posix \
-            jq procps-ng hostname which diffutils findutils \
             boost-devel boost-graph boost-filesystem boost-system \
-            libedit-devel readline-devel yaml-cpp-devel \
-            perl-Test-Harness curl tar gzip || true
-          # Some packages may not exist on all distros, continue anyway
+            libedit-devel readline-devel yaml-cpp-devel || true
 
       - name: Install Flux RPMs
         run: |
