@@ -407,14 +407,15 @@ jobs:
       - name: Install build/test dependencies
         run: |
           # Essential build tools - must succeed
-          ${{ matrix.pkg-manager }} install -y \
+          # Use --allowerasing to handle curl-minimal conflict on CentOS
+          ${{ matrix.pkg-manager }} install -y --allowerasing \
             make autoconf automake libtool gcc gcc-c++ \
             python3-devel python3-setuptools \
             curl tar gzip jq procps-ng hostname which diffutils findutils \
             perl-Test-Harness
           
           # Additional dependencies - some may not exist on all distros
-          ${{ matrix.pkg-manager }} install -y \
+          ${{ matrix.pkg-manager }} install -y --allowerasing \
             cmake pkgconfig \
             python3-cffi python3-pyyaml python3-jsonschema \
             libuuid-devel jansson-devel lz4-devel libarchive-devel \
@@ -460,21 +461,31 @@ jobs:
           ./configure --prefix=/usr \
             --with-flux-security \
             --disable-docs \
-            CFLAGS="-O2" \
+            CFLAGS="-O2 -Wno-error" \
             PKG_CONFIG_PATH=/usr/lib64/pkgconfig
           
-          # Build test programs and infrastructure only
-          make -C src/common
-          make -C t
+          # Full build to create all test binaries and example programs
+          make -j$(nproc)
 
       - name: Run flux-core tests
         working-directory: flux-core-src/t
         run: |
+          # Set up paths for test infrastructure
+          # The built flux commands (like flux-modprobe) must be in PATH
+          export PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd:$PATH
+          
+          # Tell flux where to find additional subcommands from build tree
+          export FLUX_EXEC_PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd
+          
+          # Python path for flux module built in tree
+          export PYTHONPATH=$GITHUB_WORKSPACE/flux-core-src/src/bindings/python:$PYTHONPATH
+          
+          # Core test environment variables
           export FLUX_TEST_INSTALLED_PATH=/usr/bin
+          export FLUX_BUILD_DIR=$GITHUB_WORKSPACE/flux-core-src
           export SHARNESS_BUILD_DIRECTORY=$GITHUB_WORKSPACE/flux-core-src
           
           # Run a selection of important tests (not the full suite for CI time)
-          # These are tests that work well with installed packages
           prove -v --timer -j4 \
             ./t0001-basic.t \
             ./t0002-request.t \
@@ -485,7 +496,7 @@ jobs:
             ./t0009-dmesg.t \
             ./t1000-kvs.t \
             ./t1001-kvs-internals.t
-        continue-on-error: true
+        continue-on-error: ${{ matrix.allow-failure || false }}
 
       # ============================================================
       # flux-sched upstream tests
@@ -514,7 +525,14 @@ jobs:
       - name: Run flux-sched tests
         working-directory: flux-sched-src/t
         run: |
+          # Set up paths for test infrastructure (need flux-core build tree for flux-modprobe)
+          export PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd:$PATH
+          export FLUX_EXEC_PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd
+          export PYTHONPATH=$GITHUB_WORKSPACE/flux-core-src/src/bindings/python:$PYTHONPATH
+          
+          # Core test environment variables
           export FLUX_TEST_INSTALLED_PATH=/usr/bin
+          export FLUX_BUILD_DIR=$GITHUB_WORKSPACE/flux-sched-src/build
           export SHARNESS_BUILD_DIRECTORY=$GITHUB_WORKSPACE/flux-sched-src/build
           
           # Run scheduler-specific tests
@@ -522,7 +540,7 @@ jobs:
             ./t1001-qmanager-basic.t \
             ./t1003-qmanager-policy.t \
             ./t1010-sync-modules.t
-        continue-on-error: true
+        continue-on-error: ${{ matrix.allow-failure || false }}
 
       # ============================================================
       # flux-accounting upstream tests
@@ -546,7 +564,14 @@ jobs:
       - name: Run flux-accounting tests
         working-directory: flux-accounting-src/t
         run: |
+          # Set up paths for test infrastructure (need flux-core build tree for flux-modprobe)
+          export PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd:$PATH
+          export FLUX_EXEC_PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd
+          export PYTHONPATH=$GITHUB_WORKSPACE/flux-core-src/src/bindings/python:$PYTHONPATH
+          
+          # Core test environment variables
           export FLUX_TEST_INSTALLED_PATH=/usr/bin
+          export FLUX_BUILD_DIR=$GITHUB_WORKSPACE/flux-accounting-src
           export SHARNESS_BUILD_DIRECTORY=$GITHUB_WORKSPACE/flux-accounting-src
           
           # Run accounting-specific tests
@@ -554,7 +579,7 @@ jobs:
             ./t1001-mf-priority-basic.t \
             ./t1007-flux-account-users.t \
             ./t1008-mf-priority-update.t
-        continue-on-error: true
+        continue-on-error: ${{ matrix.allow-failure || false }}
 
       # ============================================================
       # Summary
