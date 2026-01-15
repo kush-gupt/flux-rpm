@@ -144,9 +144,27 @@ mkdir -p -m 0755 %{buildroot}%{_sysconfdir}/flux/rc1.d
 
 %check
 export LC_ALL=en_US.UTF-8
-# Run the test suite. Note: Some tests may fail in mock/koji environments
-# due to missing capabilities or network restrictions.
-%make_build check || echo "Some tests failed (may be expected in mock builds)"
+# Run unit tests that don't require a running flux broker instance.
+# Full test suite requires flux broker instances which need capabilities
+# not available in isolated mock/koji build environments.
+
+cd t
+
+# Sharness framework test - validates test infrastructure
+./t0000-sharness.t
+
+# Generic utility tests - tests basic utility functions
+./t0010-generic-utils.t
+
+# Job specification parsing tests - no broker needed
+./t0022-jj-reader.t
+./t0023-jobspec1-validate.t
+./t0024-jjc-reader.t
+
+# Data marshalling and parsing tests - pure library tests
+./t0030-marshall.t
+./t0031-constraint-parser.t
+./t0032-directives-parser.t
 
 %ldconfig_scriptlets
 

@@ -15,6 +15,10 @@ This document describes the changes made to upstream LLNL spec files for Fedora 
 | %defattr | `%defattr(-,root,root)` | Removed | Deprecated, rpmbuild sets defaults |
 | %clean section | Present | Removed | Deprecated, handled by rpmbuild |
 | %post/%postun ldconfig | `-p /sbin/ldconfig` | `%ldconfig_scriptlets` | Modern Fedora macro |
+| Systemd scriptlets | Not present | `%systemd_post`, `%systemd_preun`, `%systemd_postun` | Required for systemd service files |
+| Python %files paths | Wildcards (`%{python3_sitearch}/*`) | Explicit paths (`flux`, `_flux`) | Fedora packaging committee requirement |
+| Explicit lib deps | `Requires: libuuid` | Removed | Let auto-requires handle library deps |
+| rpmlintrc files | Not present | Package-specific filters | Suppress false-positive warnings |
 | %define | `%define` | Removed (or `%global`) | Fedora prefers %global; debug package lines removed |
 | Debug packages | Disabled via `%define` | Enabled (default) | Fedora policy |
 | Python package name | `python3-yaml` | `python3-pyyaml` | Fedora package naming |
@@ -185,9 +189,12 @@ Summary: Python 3 bindings for flux-core
 Requires: %{name}%{?_isa} = %{version}-%{release}
 
 %files -n python3-flux
-%{python3_sitearch}/*
+%{python3_sitearch}/flux
+%{python3_sitearch}/_flux
 %{_libdir}/flux/python*
 ```
+
+**Important**: Python `%files` sections must use explicit paths, not wildcards. The Fedora Packaging Committee [requires explicit paths](https://pagure.io/packaging-committee/issue/782) rather than `%{pythonX_site(lib|arch)}/*` to ensure proper file ownership and avoid conflicts.
 
 The multi-Python build loop in `%install` is also removed.
 
@@ -382,6 +389,96 @@ The `-t` flag for xargs is BSD-specific and causes issues. The `2>/dev/null || t
 
 Suppresses error output if systemctl is not available.
 
+### 27. Systemd Service Scriptlets (Required)
+
+Packages with systemd service files must use the proper scriptlets. This is separate from `%ldconfig_scriptlets` which handles shared libraries.
+
+```spec
+%post
+%systemd_post flux.service
+
+%preun
+%systemd_preun flux.service
+
+%postun
+%systemd_postun_with_restart flux.service
+```
+
+For flux-core, we also include custom logic to stop the service gracefully:
+```spec
+%preun
+# Stop the flux service on both removal and upgrade if active
+if /usr/bin/systemctl is-active --quiet flux.service 2>/dev/null; then
+    echo "Stopping Flux systemd unit due to upgrade/removal..."
+    /usr/bin/systemctl stop flux.service
+fi
+%systemd_preun flux.service
+```
+
+See: https://docs.fedoraproject.org/en-US/packaging-guidelines/Scriptlets/#_scriptlets
+
+### 28. Explicit Library Dependencies (Removed)
+
+```diff
+- Requires: libuuid
+```
+
+Do not explicitly require libraries that are automatically detected by rpm's auto-requires. The `libuuid` library is pulled in automatically from the ELF dependencies. Explicit library requires cause rpmlint error `E: explicit-lib-dependency`.
+
+### 29. Python Shebang Removal (flux-accounting)
+
+Python modules that are not directly executable should not have shebangs. This causes rpmlint error `E: non-executable-script`. Remove shebangs from non-executable Python files in `%install`:
+
+```spec
+%install
+%make_install
+
+# Remove shebangs from non-executable Python modules
+find %{buildroot}%{python3_sitearch}/fluxacct -name '*.py' -type f ! -perm /111 \
+    -exec sed -i '1{/^#!/d}' {} \;
+```
+
+### 30. Directory Ownership (Required)
+
+Packages must own all directories they create, and must not own directories owned by other packages. For directories under `/etc/flux/system/`:
+
+```spec
+%files
+%dir %{_sysconfdir}/flux/system
+%dir %{_sysconfdir}/flux/system/cron.d
+%{_sysconfdir}/flux/system/cron.d/kvs-backup.cron
+```
+
+### 31. rpmlintrc Files for False Positives
+
+Create `.rpmlintrc` files to suppress known false-positive warnings. These are placed alongside the spec files.
+
+**flux-core.rpmlintrc:**
+```python
+# Spelling errors for domain-specific terms
+addFilter("spelling-error.*comms")
+# libpmi*.so are intentionally in main package (PMI interface)
+addFilter("devel-file-in-non-devel-package.*/usr/lib64/flux/libpmi")
+# Cross-directory hard links are from upstream Python packaging
+addFilter("cross-directory-hard-link")
+```
+
+**flux-sched.rpmlintrc:**
+```python
+# Domain-specific terms
+addFilter("spelling-error.*(fluxion|qmanager)")
+# Internal libraries without standard soname
+addFilter("invalid-soname.*libsched-fluxion")
+```
+
+**flux-accounting.rpmlintrc:**
+```python
+# Domain-specific term for fair share scheduling
+addFilter("spelling-error.*fairshare")
+```
+
+These filters ensure that domain-specific terminology and intentional packaging decisions don't generate spurious warnings during Fedora Review.
+
 ## Current Spec File Compliance Status
 
 All spec files in this repository (`flux-security.spec`, `flux-core.spec`, `flux-sched.spec`, and `flux-accounting.spec`) implement:
@@ -397,12 +494,16 @@ All spec files in this repository (`flux-security.spec`, `flux-core.spec`, `flux
 | No `%defattr` | ✅ | |
 | No `%clean` section | ✅ | |
 | `%ldconfig_scriptlets` | ✅ | |
+| Systemd scriptlets | ✅ | `%systemd_post`, `%systemd_preun`, `%systemd_postun` |
 | Debug packages enabled | ✅ | No `%define debug_package %{nil}` |
 | `%{python3_sitearch}` | ✅ | For Python files |
+| Python explicit paths | ✅ | No wildcards in `%files` |
 | `python3-pyyaml` naming | ✅ | Correct Fedora package name |
 | `-devel` subpackage | ✅ | Proper separation |
 | `python3-flux` subpackage | ✅ | Generic Python bindings package |
-| `%config(noreplace)` | ✅ | For config files |
+| `%config(noreplace)` | ✅ | For config files and rc scripts |
+| Directory ownership | ✅ | `%dir` for `/etc/flux/system{,/cron.d}` |
+| No explicit lib deps | ✅ | Auto-requires handles libraries |
 | Standard macros | ✅ | `%{_bindir}`, `%{_libdir}`, etc. |
 | `%attr` for setuid | ✅ | `flux-imp` is 4755 |
 | `%autosetup` | ✅ | Modern setup macro |
@@ -416,6 +517,8 @@ All spec files in this repository (`flux-security.spec`, `flux-core.spec`, `flux
 | No LLNL patches | ✅ | `systemd-no-linger.patch` removed |
 | No custom CFLAGS | ✅ | Uses %configure defaults |
 | No LLNL conditionals | ✅ | No `%if 0%{?bl6}` blocks |
+| rpmlintrc files | ✅ | Filter domain-specific false positives |
+| `%check` section | ✅ | Present (tests may be skipped in mock) |
 
 ## Optional Modern Features (Not Required)
 
@@ -439,11 +542,14 @@ Release: %autorelease
 ### Systemd Integration
 - ✅ Uses `%{_unitdir}` for systemd unit files
 - ✅ Uses `systemd-rpm-macros` for `%{_tmpfilesdir}`
+- ✅ Uses `%systemd_post`, `%systemd_preun`, `%systemd_postun` scriptlets
 - ✅ No SysV initscripts (forbidden in Fedora)
 
 ### File Ownership
 - ✅ Package owns all directories it creates (`%dir` directives)
 - ✅ Config files use `%config(noreplace)`
+- ✅ RC scripts in `/etc/flux/rc*.d/` marked as `%config(noreplace)`
+- ✅ Directory ownership for `/etc/flux/system/` hierarchy
 
 ### Setuid Binary
 - ✅ `flux-imp` uses `%attr(04755, root, root)` per security guidelines
@@ -482,9 +588,10 @@ When targeting EPEL (Extra Packages for Enterprise Linux), additional changes ma
 
 1. **Add Fedora-specific changelog entries** when submitting to Fedora
 2. **Consider %autochangelog** if maintaining in Fedora dist-git
-3. **Add %check section** with actual test execution (currently not present)
+3. **Enable actual test execution** in `%check` (currently tests are skipped or non-fatal due to mock environment limitations)
 4. **Consider splitting large docs** into `-doc` subpackage if size warrants
 5. **Add EPEL conditionals** when submitting to EPEL
+6. **GPG signature verification** using `gpgverify` in `%prep` if upstream publishes signatures
 
 ## References
 

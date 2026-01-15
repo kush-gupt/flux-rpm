@@ -75,8 +75,12 @@ find %{buildroot}%{python3_sitearch}/fluxacct -name '*.py' -type f ! -perm /111 
     -exec sed -i '1{/^#!/d}' {} \;
 
 %check
-# Tests require running flux instance - skip in mock builds
-:
+export LC_ALL=en_US.UTF-8
+# Run basic sharness framework test (verifies test infrastructure)
+# Full test suite requires a running flux broker instance with the
+# mf_priority plugin loaded, which isn't available in mock/koji builds.
+cd t
+./t0000-sharness.t
 
 %ldconfig_scriptlets
 
