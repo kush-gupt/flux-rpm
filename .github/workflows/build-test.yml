@@ -232,3 +232,219 @@ jobs:
       - name: Cleanup mock
         if: always()
         run: mock -r ${{ matrix.mock-release }} --clean
+
+  # ============================================================
+  # Integration Tests - Run upstream test suites against installed RPMs
+  # Uses FLUX_TEST_INSTALLED_PATH to test installed packages
+  # ============================================================
+  integration-tests:
+    name: Integration Tests (${{ matrix.distro }})
+    runs-on: ubuntu-latest
+    needs: [build-all]
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro: fedora-41
+            image: fedora:41
+            short-name: f41
+          - distro: fedora-42
+            image: fedora:42
+            short-name: f42
+    container:
+      image: ${{ matrix.image }}
+      options: --privileged --cap-add=SYS_PTRACE
+    env:
+      # Tell test suite to use installed flux, not build directory
+      FLUX_TEST_INSTALLED_PATH: /usr/bin
+      TAP_DRIVER_QUIET: 1
+      FLUX_TEST_TIMEOUT: 300
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download RPMs
+        uses: actions/download-artifact@v4
+        with:
+          name: rpms-${{ matrix.short-name }}
+          path: ./rpms
+
+      - name: Install build/test dependencies
+        run: |
+          dnf install -y \
+            make autoconf automake libtool pkgconfig gcc gcc-c++ \
+            python3-devel python3-cffi python3-yaml python3-jsonschema \
+            libuuid-devel jansson-devel lz4-devel libarchive-devel \
+            hwloc-devel sqlite-devel ncurses-devel libsodium-devel \
+            lua lua-devel lua-posix \
+            valgrind jq procps-ng hostname which diffutils \
+            aspell aspell-en \
+            boost-devel boost-graph boost-filesystem boost-system \
+            libedit-devel readline-devel
+
+      - name: Install Flux RPMs
+        run: |
+          # Install all non-debug RPMs including devel packages for test builds
+          dnf install -y \
+            rpms/results-security/flux-security-[0-9]*.x86_64.rpm \
+            rpms/results-security/flux-security-devel-*.x86_64.rpm \
+            rpms/results-core/flux-core-[0-9]*.x86_64.rpm \
+            rpms/results-core/flux-core-devel-*.x86_64.rpm \
+            rpms/results-core/python3-flux-[0-9]*.x86_64.rpm \
+            rpms/results-sched/flux-sched-[0-9]*.x86_64.rpm \
+            rpms/results-accounting/flux-accounting-[0-9]*.x86_64.rpm
+          
+          echo "=== Installed Flux packages ===" 
+          rpm -qa | grep -E '^(flux|python3-flux)' | sort
+          
+          # Verify flux works
+          flux --version
+
+      # ============================================================
+      # flux-core upstream tests
+      # ============================================================
+      - name: Download flux-core source for tests
+        run: |
+          CORE_VER=$(rpm -q --qf '%{VERSION}' flux-core)
+          echo "Testing flux-core version: $CORE_VER"
+          curl -sL "https://github.com/flux-framework/flux-core/releases/download/v${CORE_VER}/flux-core-${CORE_VER}.tar.gz" \
+            -o flux-core.tar.gz
+          tar xzf flux-core.tar.gz
+          mv flux-core-${CORE_VER} flux-core-src
+
+      - name: Configure flux-core tests
+        working-directory: flux-core-src
+        run: |
+          # Configure to build test infrastructure against installed flux
+          ./configure --prefix=/usr \
+            --with-flux-security \
+            --disable-docs \
+            CFLAGS="-O2" \
+            PKG_CONFIG_PATH=/usr/lib64/pkgconfig
+          
+          # Build test programs and infrastructure only
+          make -C src/common
+          make -C t
+
+      - name: Run flux-core tests
+        working-directory: flux-core-src
+        run: |
+          # Run core tests against installed packages
+          # Skip tests that require build-dir specific paths or valgrind
+          cd t
+          export FLUX_TEST_INSTALLED_PATH=/usr/bin
+          
+          # Run a selection of important tests (not the full suite for CI time)
+          # These are tests that work well with installed packages
+          prove -v --timer \
+            ./t0001-basic.t \
+            ./t0002-request.t \
+            ./t0003-module.t \
+            ./t0004-event.t \
+            ./t0007-ping.t \
+            ./t0008-attr.t \
+            ./t0009-dmesg.t \
+            ./t1000-kvs.t \
+            ./t1001-kvs-internals.t \
+            ./t2201-job-manager-single.t \
+            :: --jobs 4
+        continue-on-error: true
+
+      # ============================================================
+      # flux-sched upstream tests
+      # ============================================================
+      - name: Download flux-sched source for tests
+        run: |
+          SCHED_VER=$(rpm -q --qf '%{VERSION}' flux-sched)
+          echo "Testing flux-sched version: $SCHED_VER"
+          curl -sL "https://github.com/flux-framework/flux-sched/releases/download/v${SCHED_VER}/flux-sched-${SCHED_VER}.tar.gz" \
+            -o flux-sched.tar.gz
+          tar xzf flux-sched.tar.gz
+          mv flux-sched-${SCHED_VER} flux-sched-src
+
+      - name: Configure and build flux-sched tests
+        working-directory: flux-sched-src
+        run: |
+          mkdir -p build && cd build
+          cmake .. \
+            -DCMAKE_INSTALL_PREFIX=/usr \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DFLUX_PREFIX=/usr
+          
+          # Build test infrastructure
+          make -j$(nproc)
+
+      - name: Run flux-sched tests
+        working-directory: flux-sched-src/build
+        run: |
+          export FLUX_TEST_INSTALLED_PATH=/usr/bin
+          cd t
+          
+          # Run scheduler-specific tests
+          prove -v --timer \
+            ./t1001-qmanager-basic.t \
+            ./t1003-qmanager-policy.t \
+            ./t1010-sync-modules.t \
+            :: --jobs 2
+        continue-on-error: true
+
+      # ============================================================
+      # flux-accounting upstream tests
+      # ============================================================
+      - name: Download flux-accounting source for tests
+        run: |
+          ACCT_VER=$(rpm -q --qf '%{VERSION}' flux-accounting)
+          echo "Testing flux-accounting version: $ACCT_VER"
+          curl -sL "https://github.com/flux-framework/flux-accounting/releases/download/v${ACCT_VER}/flux-accounting-${ACCT_VER}.tar.gz" \
+            -o flux-accounting.tar.gz
+          tar xzf flux-accounting.tar.gz
+          mv flux-accounting-${ACCT_VER} flux-accounting-src
+
+      - name: Configure flux-accounting tests
+        working-directory: flux-accounting-src
+        run: |
+          ./configure --prefix=/usr \
+            PKG_CONFIG_PATH=/usr/lib64/pkgconfig
+          make -j$(nproc)
+
+      - name: Run flux-accounting tests
+        working-directory: flux-accounting-src
+        run: |
+          export FLUX_TEST_INSTALLED_PATH=/usr/bin
+          cd t
+          
+          # Run accounting-specific tests
+          prove -v --timer \
+            ./t1001-mf-priority-basic.t \
+            ./t1007-flux-account-users.t \
+            ./t1008-mf-priority-update.t \
+            :: --jobs 2
+        continue-on-error: true
+
+      # ============================================================
+      # Summary
+      # ============================================================
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "=== Integration Test Summary ===" | tee test-summary.txt
+          echo "Distro: ${{ matrix.distro }}" >> test-summary.txt
+          echo "Date: $(date)" >> test-summary.txt
+          echo "" >> test-summary.txt
+          echo "Installed packages:" >> test-summary.txt
+          rpm -qa | grep -E '^(flux|python3-flux)' | sort >> test-summary.txt
+          echo "" >> test-summary.txt
+          echo "Test environment:" >> test-summary.txt
+          echo "  FLUX_TEST_INSTALLED_PATH=$FLUX_TEST_INSTALLED_PATH" >> test-summary.txt
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.short-name }}
+          path: |
+            test-summary.txt
+            flux-core-src/t/test-results/
+            flux-sched-src/build/t/test-results/
+            flux-accounting-src/t/test-results/
