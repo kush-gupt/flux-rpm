@@ -463,12 +463,10 @@ jobs:
             CFLAGS="-O2 -Wno-error" \
             PKG_CONFIG_PATH=/usr/lib64/pkgconfig
           
-          # Build main code
+          # Build everything including test infrastructure
+          # 'make check TESTS=' builds all test modules/programs but runs no tests
           make -j$(nproc)
-          
-          # Explicitly build test modules and programs (t/*.so, t/*/treq, etc.)
-          # This is needed because 'make' alone doesn't build test infrastructure
-          make -C t -j$(nproc) || true
+          make check TESTS= -j$(nproc) || true
 
       - name: Run flux-core tests
         working-directory: flux-core-src/t
@@ -562,7 +560,9 @@ jobs:
         run: |
           ./configure --prefix=/usr \
             PKG_CONFIG_PATH=/usr/lib64/pkgconfig
+          # Build everything including test infrastructure
           make -j$(nproc)
+          make check TESTS= -j$(nproc) || true
 
       - name: Run flux-accounting tests
         working-directory: flux-accounting-src/t
