@@ -1,0 +1,43 @@
+# Typos configuration for flux-rpm
+# https://github.com/crate-ci/typos
+
+[default]
+extend-ignore-re = [
+  # Ignore SHA hashes
+  "[a-f0-9]{40}",
+  # Ignore base64 encoded strings
+  "[A-Za-z0-9+/]{40,}={0,2}",
+]
+
+[default.extend-words]
+# Domain-specific terms used in Flux
+fluxion = "fluxion"
+qmanager = "qmanager"
+comms = "comms"
+fairshare = "fairshare"
+hwloc = "hwloc"
+libsodium = "libsodium"
+
+# RPM/Fedora specific terms
+buildroot = "buildroot"
+autosetup = "autosetup"
+rpmlint = "rpmlint"
+rpmlintrc = "rpmlintrc"
+rpmspec = "rpmspec"
+pkgconfig = "pkgconfig"
+ldconfig = "ldconfig"
+
+# Technical terms
+munge = "munge"
+kvs = "kvs"
+toml = "toml"
+
+[files]
+extend-exclude = [
+  "*.patch",
+  "*.tar.gz",
+  "*.rpm",
+]
+
+[type.spec]
+extend-glob = ["*.spec"]

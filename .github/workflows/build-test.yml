@@ -16,6 +16,31 @@ env:
   BUILDER_IMAGE: ghcr.io/${{ github.repository }}/flux-rpm-builder:latest
 
 jobs:
+  # ============================================================
+  # Quick validation jobs (run in parallel, fail fast)
+  # ============================================================
+  spelling:
+    name: Spelling check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Spelling
+        uses: crate-ci/typos@v1.28.4
+        with:
+          config: .github/typos.toml
+
+  shellcheck:
+    name: Shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run shellcheck on scripts
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: '.github'
+          ignore_paths: ''
+          severity: warning
+
   lint:
     name: Lint spec files
     runs-on: ubuntu-latest
@@ -23,13 +48,79 @@ jobs:
       image: fedora:latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install and run rpmlint
+      - name: Install rpmlint with config files
         run: |
           dnf install -y rpmlint
-          rpmlint flux-security/flux-security.spec || true
-          rpmlint flux-core/flux-core.spec || true
-          rpmlint flux-sched/flux-sched.spec || true
-          rpmlint flux-accounting/flux-accounting.spec || true
+          
+          # Copy rpmlintrc files to expected location
+          mkdir -p ~/.config/rpmlint
+          for pkg in flux-security flux-core flux-sched flux-accounting; do
+            if [ -f "$pkg/$pkg.rpmlintrc" ]; then
+              cp "$pkg/$pkg.rpmlintrc" ~/.config/rpmlint/
+            fi
+          done
+      
+      - name: Run rpmlint on all spec files
+        run: |
+          echo "=== Linting flux-security.spec ===" 
+          rpmlint flux-security/flux-security.spec
+          
+          echo "=== Linting flux-core.spec ===" 
+          rpmlint flux-core/flux-core.spec
+          
+          echo "=== Linting flux-sched.spec ===" 
+          rpmlint flux-sched/flux-sched.spec
+          
+          echo "=== Linting flux-accounting.spec ===" 
+          rpmlint flux-accounting/flux-accounting.spec
+
+  spec-validation:
+    name: Validate spec files
+    runs-on: ubuntu-latest
+    container:
+      image: fedora:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rpmspec
+        run: dnf install -y rpm-build
+      
+      - name: Validate spec file syntax
+        run: |
+          for spec in flux-*/flux-*.spec; do
+            echo "Validating: $spec"
+            rpmspec -P "$spec" > /dev/null
+            echo "  ✓ $spec is valid"
+          done
+      
+      - name: Check required spec fields
+        run: |
+          for spec in flux-*/flux-*.spec; do
+            echo "Checking required fields in: $spec"
+            
+            # Check for required fields
+            grep -q "^Name:" "$spec" || { echo "Missing Name in $spec"; exit 1; }
+            grep -q "^Version:" "$spec" || { echo "Missing Version in $spec"; exit 1; }
+            grep -q "^Release:" "$spec" || { echo "Missing Release in $spec"; exit 1; }
+            grep -q "^License:" "$spec" || { echo "Missing License in $spec"; exit 1; }
+            grep -q "^URL:" "$spec" || { echo "Missing URL in $spec"; exit 1; }
+            grep -q "^Source0:" "$spec" || { echo "Missing Source0 in $spec"; exit 1; }
+            grep -q "^%description" "$spec" || { echo "Missing %description in $spec"; exit 1; }
+            grep -q "^%changelog" "$spec" || { echo "Missing %changelog in $spec"; exit 1; }
+            
+            # Check for Fedora best practices
+            grep -q "%{?dist}" "$spec" || echo "  Warning: %{?dist} not found in Release"
+            grep -q "%autosetup" "$spec" || grep -q "%setup" "$spec" || echo "  Warning: No %setup or %autosetup found"
+            
+            echo "  ✓ $spec has all required fields"
+          done
+      
+      - name: Check changelog format
+        run: |
+          for spec in flux-*/flux-*.spec; do
+            echo "Checking changelog in: $spec"
+            # Extract changelog and verify format
+            sed -n '/%changelog/,$ p' "$spec" | head -5
+          done
 
   # Check container availability (fast, parallel)
   check-container:
@@ -274,14 +365,15 @@ jobs:
         run: |
           dnf install -y \
             make autoconf automake libtool pkgconfig gcc gcc-c++ \
-            python3-devel python3-cffi python3-yaml python3-jsonschema \
+            python3-devel python3-setuptools python3-cffi python3-yaml python3-jsonschema \
             libuuid-devel jansson-devel lz4-devel libarchive-devel \
-            hwloc-devel sqlite-devel ncurses-devel libsodium-devel \
+            hwloc-devel sqlite-devel ncurses-devel libsodium-devel zeromq-devel \
             lua lua-devel lua-posix \
-            valgrind jq procps-ng hostname which diffutils \
+            valgrind jq procps-ng hostname which diffutils findutils \
             aspell aspell-en \
             boost-devel boost-graph boost-filesystem boost-system \
-            libedit-devel readline-devel
+            libedit-devel readline-devel \
+            perl-Test-Harness
 
       - name: Install Flux RPMs
         run: |
