@@ -588,10 +588,10 @@ When targeting EPEL (Extra Packages for Enterprise Linux), additional changes ma
 
 1. **Add Fedora-specific changelog entries** when submitting to Fedora
 2. **Consider %autochangelog** if maintaining in Fedora dist-git
-3. **Enable actual test execution** in `%check` (currently tests are skipped or non-fatal due to mock environment limitations)
+3. **Enable actual test execution** in `%check` (tests are skipped or non-fatal due to mock environment limitations)
 4. **Consider splitting large docs** into `-doc` subpackage if size warrants
 5. **Add EPEL conditionals** when submitting to EPEL
-6. **GPG signature verification** using `gpgverify` in `%prep` if upstream publishes signatures
+6. **GPG signature verification** using `gpgverify` in `%prep`
 
 ## References
 

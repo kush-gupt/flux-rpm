@@ -1,10 +1,14 @@
 Name:    flux-sched
 Version: 0.48.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-sched
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
+
+# Work around GCC 15 internal compiler error (ICE) in scope_guard.hpp
+# GCC bug: https://gcc.gnu.org/bugzilla/
+Patch0:  gcc15-ice-workaround.patch
 
 # Can't use binary annotations for some reason:
 %undefine _annotated_build
@@ -137,6 +141,9 @@ find %{buildroot} -name '*.la' -delete
 %{_mandir}/man5/*
 
 %changelog
+* Wed Jan 15 2026 Kush Gupta <kush-gupt@users.noreply.github.com> - 0.48.0-2
+- Add patch to work around GCC 15 internal compiler error in scope_guard.hpp
+
 * Wed Jan 7 2026 Kush Gupta <kush-gupt@users.noreply.github.com> - 0.48.0-1
 - Update to flux-sched v0.48.0
 - Add gcc-toolset-13 for EL9 builds (requires GCC 12+)

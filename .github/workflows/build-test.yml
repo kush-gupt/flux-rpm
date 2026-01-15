@@ -414,8 +414,8 @@ jobs:
             lua lua-devel lua-posix \
             jq procps-ng hostname which diffutils findutils \
             boost-devel boost-graph boost-filesystem boost-system \
-            libedit-devel readline-devel \
-            perl-Test-Harness || true
+            libedit-devel readline-devel yaml-cpp-devel \
+            perl-Test-Harness curl tar gzip || true
           # Some packages may not exist on all distros, continue anyway
 
       - name: Install Flux RPMs

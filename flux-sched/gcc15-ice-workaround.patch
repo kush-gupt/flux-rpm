@@ -1,0 +1,55 @@
+From: Kush Gupta <kugupta@redhat.com>
+Date: Thu, 15 Jan 2026 00:00:00 +0000
+Subject: [PATCH] scope_guard: fix GCC 15 internal compiler error
+
+GCC 15 has an internal compiler error (ICE) when compiling the friend
+declaration with a complex dependent noexcept specification:
+
+  src/common/libintern/scope_guard.hpp:118:2: internal compiler error:
+    Segmentation fault
+
+The ICE is triggered by the noexcept specification in the friend
+declaration that references the enclosing class template parameter.
+
+Fix this by removing the noexcept specification from the friend
+declaration. This is safe because:
+
+1. The noexcept specification on a friend declaration is not part of
+   the function's type and does not affect overload resolution
+2. The actual function definition (below the class) retains the full
+   noexcept specification, which is what matters for runtime behavior
+3. C++ standard [dcl.fct.spec] states that a friend declaration
+   does not introduce the noexcept specification - it merely grants
+   access to private members
+
+This change preserves the exact same friend relationship (only
+make_scope_guard<Callback> is a friend of scope_guard<Callback>)
+and the exact same noexcept behavior at runtime.
+
+Fixes build on Fedora Rawhide with GCC 15.
+
+---
+ src/common/libintern/scope_guard.hpp | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/common/libintern/scope_guard.hpp b/src/common/libintern/scope_guard.hpp
+--- a/src/common/libintern/scope_guard.hpp
++++ b/src/common/libintern/scope_guard.hpp
+@@ -106,12 +106,12 @@ class scope_guard {
+     explicit scope_guard (Callback &&callback) noexcept (
+         std::is_nothrow_constructible<Callback, Callback &&>::value); /*
+                                                 meant for friends only */
++    /* noexcept spec removed from friend decl to fix GCC 15 ICE;
++       the function definition below retains the proper noexcept spec */
++    friend scope_guard<Callback> make_scope_guard<Callback> (Callback &&); /*
++        only make_scope_guard can create scope_guards from scratch (i.e. non-move)
++    */
+ 
+-    friend scope_guard<Callback> make_scope_guard<Callback> (Callback &&) noexcept (
+-        std::is_nothrow_constructible<Callback, Callback &&>::value); /*
+-only make_scope_guard can create scope_guards from scratch (i.e. non-move)
+-*/
+-
+    private:
+     Callback m_callback;
+     bool m_active;
