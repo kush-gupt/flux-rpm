@@ -424,6 +424,13 @@ jobs:
             boost-devel boost-graph boost-filesystem boost-system \
             libedit-devel readline-devel yaml-cpp-devel || true
 
+      - name: Install GCC Toolset 13 (CentOS 9 only)
+        if: matrix.short-name == 'centos-9'
+        run: |
+          # CentOS 9 ships GCC 11, but flux-sched requires GCC 12+
+          # Install gcc-toolset-13 which provides GCC 13
+          dnf install -y gcc-toolset-13-gcc gcc-toolset-13-gcc-c++
+
       - name: Install Flux RPMs
         run: |
           # Install all non-debug RPMs including devel packages for test builds
@@ -497,7 +504,6 @@ jobs:
             ./t0009-dmesg.t \
             ./t1000-kvs.t \
             ./t1001-kvs-internals.t
-        continue-on-error: true  # Allow other tests to run even if these fail
 
       # ============================================================
       # flux-sched upstream tests
@@ -511,9 +517,23 @@ jobs:
           tar xzf flux-sched.tar.gz
           mv flux-sched-${SCHED_VER} flux-sched-src
 
+      - name: Apply GCC 15+ ICE workaround patch
+        working-directory: flux-sched-src
+        run: |
+          # Apply the GCC 15 ICE workaround patch for Rawhide (and future distros)
+          # This patch removes a problematic noexcept spec from a friend declaration
+          # that triggers an internal compiler error in GCC 15+
+          patch -p1 < $GITHUB_WORKSPACE/flux-sched/gcc15-ice-workaround.patch || true
+
       - name: Configure and build flux-sched tests
         working-directory: flux-sched-src
         run: |
+          # Enable GCC Toolset 13 on CentOS 9 (provides GCC 13 vs default GCC 11)
+          if [ -f /opt/rh/gcc-toolset-13/enable ]; then
+            source /opt/rh/gcc-toolset-13/enable
+            echo "Using GCC Toolset 13: $(gcc --version | head -1)"
+          fi
+          
           mkdir -p build && cd build
           cmake .. \
             -DCMAKE_INSTALL_PREFIX=/usr \
@@ -541,7 +561,6 @@ jobs:
             ./t1001-qmanager-basic.t \
             ./t1003-qmanager-policy.t \
             ./t1010-sync-modules.t
-        continue-on-error: true  # Allow accounting tests to run even if these fail
 
       # ============================================================
       # flux-accounting upstream tests
@@ -582,7 +601,6 @@ jobs:
             ./t1001-mf-priority-basic.t \
             ./t1007-flux-account-users.t \
             ./t1008-mf-priority-update.t
-        continue-on-error: true  # Record results but don't fail job
 
       # ============================================================
       # Summary
