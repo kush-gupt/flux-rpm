@@ -1,8 +1,113 @@
+From 36df638557926f093d6ad02e58b03858b13da296 Mon Sep 17 00:00:00 2001
+From: Kush Gupta <kugupta@redhat.com>
+Date: Tue, 7 Jan 2026 22:22:17 +0000
+Subject: [PATCH] Tighten const correctness
+
+Tighten const correctness across various modules and string helpers to
+better reflect immutability and avoid unnecessary mutable pointers for
+better C23 compatibility.
+
+Bug Fixes:
+
+- Correct use of original mutable buffers when parsing numeric ranges
+  to avoid modifying string literals or incorrect pointers.
+
+Enhancements:
+
+- Adjust basename_simple and its callers to return and use const char*
+  instead of mutable char*.
+- Update internal helpers and local variables that inspect strings
+  (e.g., strchr/strpbrk results, log program name, temp directory paths)
+  to use const-qualified pointers.
+- Document and add explicit casts where mutable access to strchr results
+  is intentional under newer C standards.
+
+Fixes flux-framework/flux-core#7262
+
+Upstream: https://github.com/flux-framework/flux-core/pull/7263
+---
+ src/broker/module_dso.c              |  4 ++--
+ src/broker/runat.c                   |  2 +-
+ src/cmd/builtin/restore.c            |  2 +-
+ src/common/libeventlog/eventlog.c    |  2 +-
+ src/common/libhostlist/hostlist.c    | 10 +++++-----
+ src/common/libjob/sign_none.c        |  2 +-
+ src/common/liboptparse/getopt.c      |  2 +-
+ src/common/libpmi/keyval.c           |  2 +-
+ src/common/librlist/match.c          |  2 +-
+ src/common/librlist/rlist.c          | 15 +++++++++------
+ src/common/librouter/disconnect.c    |  2 +-
+ src/common/libsubprocess/command.c   |  4 ++--
+ src/common/libtomlc99/test/toml.c    |  2 +-
+ src/common/libutil/basename.c        |  6 +++---
+ src/common/libutil/basename.h        |  2 +-
+ src/common/libutil/cronodate.c       |  7 ++++++-
+ src/common/libutil/log.c             |  2 +-
+ src/modules/connector-local/local.c  |  2 +-
+ src/modules/job-info/util.c          |  2 +-
+ src/modules/job-list/job_data.c      |  2 +-
+ src/shell/mustache.c                 |  4 ++--
+ 21 files changed, 41 insertions(+), 37 deletions(-)
+
+diff --git a/src/broker/module_dso.c b/src/broker/module_dso.c
+index 0bd23841d..e8403d144 100644
+--- a/src/broker/module_dso.c
++++ b/src/broker/module_dso.c
+@@ -112,8 +112,8 @@ void *module_dso_open (const char *path,
+ 
+ char *module_dso_name (const char *path)
+ {
+-    char *name;
+-    char *cp;
++    const char *name;
++    const char *cp;
+ 
+     name = basename_simple (path);
+     // if path ends in .so or .so.VERSION, strip it off
+diff --git a/src/broker/runat.c b/src/broker/runat.c
+index 7c819ef80..24d93fae9 100644
+--- a/src/broker/runat.c
++++ b/src/broker/runat.c
+@@ -281,7 +281,7 @@ static void stdio_cb (flux_subprocess_t *p, const char *stream)
+     while (len > 0) {
+         int n = len;
+         int skip = 0;
+-        char *cp;
++        const char *cp;
+         if ((cp = memchr (data, '\n', len))) {
+             n = cp - data;
+             skip = 1;
+diff --git a/src/cmd/builtin/restore.c b/src/cmd/builtin/restore.c
+index 50b3f84b2..ff0441ea0 100644
+--- a/src/cmd/builtin/restore.c
++++ b/src/cmd/builtin/restore.c
+@@ -350,7 +350,7 @@ static json_t *restore_snapshot (struct archive *ar,
+ static int shortblobref_length (const char *blobref)
+ {
+     int len = 8;
+-    char *cp;
++    const char *cp;
+ 
+     if ((cp = strchr (blobref, '-')))
+         len += (cp - blobref) + 1;
+diff --git a/src/common/libeventlog/eventlog.c b/src/common/libeventlog/eventlog.c
+index d94688c2f..6f669e4cd 100644
+--- a/src/common/libeventlog/eventlog.c
++++ b/src/common/libeventlog/eventlog.c
+@@ -141,7 +141,7 @@ static json_t *eventlog_entry_decode_common (const char *entry,
+                                              bool trailing_newline)
+ {
+     int len;
+-    char *ptr;
++    const char *ptr;
+     json_t *o;
+ 
+     if (!entry)
 diff --git a/src/common/libhostlist/hostlist.c b/src/common/libhostlist/hostlist.c
-index d2acba4..1c13e78 100644
+index d2acba4f3..ec21618a3 100644
 --- a/src/common/libhostlist/hostlist.c
 +++ b/src/common/libhostlist/hostlist.c
-@@ -337,14 +337,14 @@ static int parse_next_range (const char *str, struct _range *range)
+@@ -337,15 +337,15 @@ static int parse_next_range (const char *str, struct _range *range)
      if (!orig)
          return -1;
  
@@ -15,25 +120,24 @@ index d2acba4..1c13e78 100644
          }
      }
 -    range->lo = strtoul (str, &q, 10);
+-    if (q == str)  {
 +    range->lo = strtoul (orig, &q, 10);
-     if (q == str)  {
++    if (q == orig)  {
          errno = EINVAL;
          goto error;
-diff --git a/src/common/libeventlog/eventlog.c b/src/common/libeventlog/eventlog.c
-index 1234567..abcdefg 100644
---- a/src/common/libeventlog/eventlog.c
-+++ b/src/common/libeventlog/eventlog.c
-@@ -141,7 +141,7 @@ static json_t *eventlog_entry_decode_common (const char *entry,
-                                              bool trailing_newline)
- {
-     int len;
--    char *ptr;
-+    const char *ptr;
-     json_t *o;
+     }
+@@ -364,8 +364,8 @@ static int parse_next_range (const char *str, struct _range *range)
+         goto error;
+     }
  
-     if (!entry)
++    range->width = strlen (orig);
+     free (orig);
+-    range->width = strlen (str);
+     return 0;
+ 
+   error:
 diff --git a/src/common/libjob/sign_none.c b/src/common/libjob/sign_none.c
-index 10e0377..a847bce 100644
+index 10e037740..a847bce1e 100644
 --- a/src/common/libjob/sign_none.c
 +++ b/src/common/libjob/sign_none.c
 @@ -174,7 +174,7 @@ int sign_none_unwrap (const char *input,
@@ -46,7 +150,7 @@ index 10e0377..a847bce 100644
      if (!input || !userid || !payload || !payloadsz)
          goto error_inval;
 diff --git a/src/common/liboptparse/getopt.c b/src/common/liboptparse/getopt.c
-index 43d64e2..220c56f 100644
+index 43d64e2f2..220c56f5d 100644
 --- a/src/common/liboptparse/getopt.c
 +++ b/src/common/liboptparse/getopt.c
 @@ -836,7 +836,7 @@ _getopt_internal_r (int argc, char *const *argv, const char *optstring,
@@ -59,7 +163,7 @@ index 43d64e2..220c56f 100644
      /* Increment `optind' when we start to process its last character.  */
      if (*d->__nextchar == '\0')
 diff --git a/src/common/libpmi/keyval.c b/src/common/libpmi/keyval.c
-index b6f31f0..169853c 100644
+index b6f31f05b..169853cb1 100644
 --- a/src/common/libpmi/keyval.c
 +++ b/src/common/libpmi/keyval.c
 @@ -21,7 +21,7 @@
@@ -71,8 +175,71 @@ index b6f31f0..169853c 100644
      const char *cp = s;
      int keylen = strlen (key);
  
+diff --git a/src/common/librlist/match.c b/src/common/librlist/match.c
+index 6895c1b34..898ebe0b6 100644
+--- a/src/common/librlist/match.c
++++ b/src/common/librlist/match.c
+@@ -220,7 +220,7 @@ bool job_constraint_match (struct job_constraint *c, const struct rnode *n)
+     return c->match (c, n);
+ }
+ 
+-static char *property_query_string_invalid (const char *s)
++static const char *property_query_string_invalid (const char *s)
+ {
+     /*  Return first invalid character.
+      *  Invalid chaaracters are listed in RFC 20, but we specifically
+diff --git a/src/common/librlist/rlist.c b/src/common/librlist/rlist.c
+index 49eb7839a..7185439e1 100644
+--- a/src/common/librlist/rlist.c
++++ b/src/common/librlist/rlist.c
+@@ -1094,7 +1094,7 @@ static void property_destructor (void **arg)
+     }
+ }
+ 
+-static char * property_string_invalid (const char *s)
++static const char * property_string_invalid (const char *s)
+ {
+     return strpbrk (s, "^&'\"`|()");
+ }
+@@ -1111,11 +1111,12 @@ int rlist_add_property (struct rlist *rl,
+     struct idset *unknown = NULL;
+     int rc = -1;
+     char *p;
++    const char *invalid;
+ 
+-    if ((p = property_string_invalid (name))) {
++    if ((invalid = property_string_invalid (name))) {
+         errprintf (errp,
+                    "Invalid character '%c' in property \"%s\"",
+-                   *p,
++                   *invalid,
+                    name);
+         errno = EINVAL;
+         goto out;
+@@ -1182,7 +1183,7 @@ int rlist_assign_properties (struct rlist *rl,
+ {
+     json_t *val;
+     const char *name;
+-    char *p;
++    const char *invalid;
+     int rc = -1;
+ 
+     if (!rl || !properties) {
+@@ -1209,10 +1210,10 @@ int rlist_assign_properties (struct rlist *rl,
+             errno = EINVAL;
+             goto error;
+         }
+-        if ((p = property_string_invalid (name))) {
++        if ((invalid = property_string_invalid (name))) {
+             errprintf (errp,
+                        "invalid character '%c' in property \"%s\"",
+-                        *p,
++                        *invalid,
+                         name);
+             errno = EINVAL;
+             goto error;
 diff --git a/src/common/librouter/disconnect.c b/src/common/librouter/disconnect.c
-index 6aba1ab..e6388b6 100644
+index 6aba1abe6..e6388b67c 100644
 --- a/src/common/librouter/disconnect.c
 +++ b/src/common/librouter/disconnect.c
 @@ -69,7 +69,7 @@ static void hash_destructor (void **item)
@@ -85,7 +252,7 @@ index 6aba1ab..e6388b6 100644
      int used;
  
 diff --git a/src/common/libsubprocess/command.c b/src/common/libsubprocess/command.c
-index d5942a4..82af852 100644
+index d5942a4e7..82af8523a 100644
 --- a/src/common/libsubprocess/command.c
 +++ b/src/common/libsubprocess/command.c
 @@ -173,7 +173,7 @@ static char **expand_argz (char *argz, size_t argz_len)
@@ -106,23 +273,52 @@ index d5942a4..82af852 100644
      if (!entry || !(p = strchr (entry, '=')))
          return NULL;
      return p+1;
+diff --git a/src/common/libtomlc99/test/toml.c b/src/common/libtomlc99/test/toml.c
+index 638138d4f..2b8f4913c 100644
+--- a/src/common/libtomlc99/test/toml.c
++++ b/src/common/libtomlc99/test/toml.c
+@@ -244,7 +244,7 @@ void parse_bad_input (void)
+ 
+     for (i = 0; i < results.gl_pathc; i++) {
+         char errbuf[255];
+-        char *name = basename_simple (results.gl_pathv[i]);
++        const char *name = basename_simple (results.gl_pathv[i]);
+         const char *reason;
+         bool blocklist = matchtab (name, bad_input_blocklist, &reason);
+ 
 diff --git a/src/common/libutil/basename.c b/src/common/libutil/basename.c
-index bdd9065..43ccbf3 100644
+index bdd906542..e47bb3814 100644
 --- a/src/common/libutil/basename.c
 +++ b/src/common/libutil/basename.c
-@@ -21,8 +21,8 @@
+@@ -19,10 +19,10 @@
+  * https://github.com/lattera/glibc/blob/master/string/basename.c
+  */
  
- char *basename_simple (const char *path)
+-char *basename_simple (const char *path)
++const char *basename_simple (const char *path)
  {
 -    char *p = strrchr (path, '/');
 -    return p ? p + 1 : (char *)path;
 +    const char *p = strrchr (path, '/');
-+    return (char *) (p ? p + 1 : path);
++    return p ? p + 1 : path;
  }
  
  // vi:ts=4 sw=4 expandtab
+diff --git a/src/common/libutil/basename.h b/src/common/libutil/basename.h
+index 315be034c..be6d7004b 100644
+--- a/src/common/libutil/basename.h
++++ b/src/common/libutil/basename.h
+@@ -11,7 +11,7 @@
+ #ifndef _UTIL_BASENAME_H
+ #define _UTIL_BASENAME_H
+ 
+-char *basename_simple (const char *path);
++const char *basename_simple (const char *path);
+ 
+ #endif /* !_UTIL_BASENAME_H */
+ 
 diff --git a/src/common/libutil/cronodate.c b/src/common/libutil/cronodate.c
-index 5713e54..e5bc404 100644
+index 5713e54ed..3bd4714860 100644
 --- a/src/common/libutil/cronodate.c
 +++ b/src/common/libutil/cronodate.c
 @@ -227,7 +227,10 @@ static int get_range (const char *r, tm_unit_t u, int *lo, int *hi)
@@ -137,21 +333,21 @@ index 5713e54..e5bc404 100644
          *(p++) = '\0';
          // r = lo, p = hi
          if (((*lo = tm_string2int (r, u)) < 0)
-@@ -255,8 +258,11 @@ static int range_parse (struct idset *n, tm_unit_t u, const char *range)
-         int stride = 1;
+diff --git a/src/common/libutil/log.c b/src/common/libutil/log.c
+index d31415f96..7834f5e38 100644
+--- a/src/common/libutil/log.c
++++ b/src/common/libutil/log.c
+@@ -27,7 +27,7 @@
+ #include "log.h"
  
-         // check for a stride and nullify trailing "/":
--        if ((q = strchr (s, '/'))) {
-+        /* Cast needed: strchr returns const char* in C23, but we know
-+         * s points to part of cpy which is a strdup'd mutable copy.
-+         */
-+        if ((q = (char *)strchr (s, '/'))) {
-             *(q++) = '\0';
-             if ((stride = string2int (q)) < 0)
-                 goto out;
-         }
+ extern char *__progname;
+-static char *prog = NULL;
++static const char *prog = NULL;
+ 
+ void
+ log_init (char *p)
 diff --git a/src/modules/connector-local/local.c b/src/modules/connector-local/local.c
-index f247364..bcfdd21 100644
+index f2473644c..bcfdd21af 100644
 --- a/src/modules/connector-local/local.c
 +++ b/src/modules/connector-local/local.c
 @@ -284,7 +284,7 @@ static int mod_main (flux_t *h, int argc, char **argv)
@@ -164,7 +360,7 @@ index f247364..bcfdd21 100644
      flux_error_t error;
      int rc = -1;
 diff --git a/src/modules/job-info/util.c b/src/modules/job-info/util.c
-index 68f3ef0..311f162 100644
+index 68f3ef0d3..311f1624f 100644
 --- a/src/modules/job-info/util.c
 +++ b/src/modules/job-info/util.c
 @@ -53,7 +53,7 @@ bool get_next_eventlog_entry (const char **pp,
@@ -177,7 +373,7 @@ index 68f3ef0..311f162 100644
      if (!(term = strchr (*pp, '\n')))
          return false;
 diff --git a/src/modules/job-list/job_data.c b/src/modules/job-list/job_data.c
-index aa789f2..d14553d 100644
+index aa789f2d6..d14553db4 100644
 --- a/src/modules/job-list/job_data.c
 +++ b/src/modules/job-list/job_data.c
 @@ -77,7 +77,7 @@ struct job *job_create (flux_t *h, flux_jobid_t id)
@@ -190,7 +386,7 @@ index aa789f2..d14553d 100644
          p++;
          /* user mistake, specified a directory with trailing '/',
 diff --git a/src/shell/mustache.c b/src/shell/mustache.c
-index 6a0bd54..c75dfed 100644
+index 6a0bd54ae..c75dfede0 100644
 --- a/src/shell/mustache.c
 +++ b/src/shell/mustache.c
 @@ -74,11 +74,11 @@ char *mustache_render (struct mustache_renderer *mr,
@@ -207,92 +403,5 @@ index 6a0bd54..c75dfed 100644
          if (start == NULL) {
              /*  No more mustache tags, put rest of string and finish
               */
-diff --git a/src/common/librlist/match.c b/src/common/librlist/match.c
-index 6895c1b..898ebe0 100644
---- a/src/common/librlist/match.c
-+++ b/src/common/librlist/match.c
-@@ -220,7 +220,7 @@ bool job_constraint_match (struct job_constraint *c, const struct rnode *n)
-     return c->match (c, n);
- }
- 
--static char *property_query_string_invalid (const char *s)
-+static const char *property_query_string_invalid (const char *s)
- {
-     /*  Return first invalid character.
-      *  Invalid chaaracters are listed in RFC 20, but we specifically
-diff --git a/src/common/librlist/rlist.c b/src/common/librlist/rlist.c
-index a61eb80..11441a1 100644
---- a/src/common/librlist/rlist.c
-+++ b/src/common/librlist/rlist.c
-@@ -1038,7 +1038,7 @@ static void property_destructor (void **arg)
-     }
- }
- 
--static char * property_string_invalid (const char *s)
-+static const char * property_string_invalid (const char *s)
- {
-     return strpbrk (s, "^&'\"`|()");
- }
-@@ -1055,11 +1055,12 @@ int rlist_add_property (struct rlist *rl,
-     struct idset *unknown = NULL;
-     int rc = -1;
-     char *p;
-+    const char *invalid;
- 
--    if ((p = property_string_invalid (name))) {
-+    if ((invalid = property_string_invalid (name))) {
-         errprintf (errp,
-                    "Invalid character '%c' in property \"%s\"",
--                   *p,
-+                   *invalid,
-                    name);
-         errno = EINVAL;
-         goto out;
-@@ -1126,7 +1127,7 @@ int rlist_assign_properties (struct rlist *rl,
- {
-     json_t *val;
-     const char *name;
--    char *p;
-+    const char *invalid;
-     int rc = -1;
- 
-     if (!rl || !properties) {
-@@ -1153,10 +1154,10 @@ int rlist_assign_properties (struct rlist *rl,
-             errno = EINVAL;
-             goto error;
-         }
--        if ((p = property_string_invalid (name))) {
-+        if ((invalid = property_string_invalid (name))) {
-             errprintf (errp,
-                        "invalid character '%c' in property \"%s\"",
--                        *p,
-+                        *invalid,
-                         name);
-             errno = EINVAL;
-             goto error;
-diff --git a/src/broker/runat.c b/src/broker/runat.c
-index c120e26..59be6c4 100644
---- a/src/broker/runat.c
-+++ b/src/broker/runat.c
-@@ -280,7 +280,7 @@ static void stdio_cb (flux_subprocess_t *p, const char *stream)
-     while (len > 0) {
-         int n = len;
-         int skip = 0;
--        char *cp;
-+        const char *cp;
-         if ((cp = memchr (data, '\n', len))) {
-             n = cp - data;
-             skip = 1;
-diff --git a/src/cmd/builtin/restore.c b/src/cmd/builtin/restore.c
-index 50b3f84..ff0441e 100644
---- a/src/cmd/builtin/restore.c
-+++ b/src/cmd/builtin/restore.c
-@@ -350,7 +350,7 @@ static json_t *restore_snapshot (struct archive *ar,
- static int shortblobref_length (const char *blobref)
- {
-     int len = 8;
--    char *cp;
-+    const char *cp;
- 
-     if ((cp = strchr (blobref, '-')))
-         len += (cp - blobref) + 1;
+-- 
+2.43.0

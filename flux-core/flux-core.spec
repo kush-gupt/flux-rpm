@@ -1,6 +1,6 @@
 Name:    flux-core
 Version: 0.81.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
@@ -287,6 +287,10 @@ fi
 %{_libdir}/flux/python*
 
 %changelog
+* Wed Jan 15 2026 Kush Gupta <kugupta@redhat.com> - 0.81.0-2
+- Add const-correctness patch for C23 compatibility (fixes #7262)
+- Backport from upstream PR #7263
+
 * Wed Dec  3 2025 Mark A. Grondona <mgrondona@llnl.gov> - 0.81.0-1
 - bump version to v0.81.0
 
