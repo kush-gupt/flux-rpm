@@ -1,0 +1,14 @@
+# Spelling errors for domain-specific terms
+addFilter("spelling-error.*comms")
+
+# libpmi*.so are intentionally in main package (PMI interface for job launchers)
+addFilter("devel-file-in-non-devel-package.*/usr/lib64/flux/libpmi")
+
+# Cross-directory hard links are from upstream Python packaging
+addFilter("cross-directory-hard-link")
+
+# flux-python is a wrapper script, manpage is not essential
+addFilter("no-manual-page-for-binary flux-python")
+
+# python3-flux subpackage documentation is in main package
+addFilter("no-documentation.*python3-flux")

@@ -70,7 +70,24 @@ export LC_ALL=en_US.UTF-8
 # Remove libtool archives
 find %{buildroot} -name '*.la' -delete
 
+# Remove shebangs from non-executable Python modules to fix rpmlint errors
+find %{buildroot}%{python3_sitearch}/fluxacct -name '*.py' -type f ! -perm /111 \
+    -exec sed -i '1{/^#!/d}' {} \;
+
+%check
+# Tests require running flux instance - skip in mock builds
+:
+
 %ldconfig_scriptlets
+
+%post
+%systemd_post flux-accounting.service
+
+%preun
+%systemd_preun flux-accounting.service
+
+%postun
+%systemd_postun_with_restart flux-accounting.service
 
 %files
 %license DISCLAIMER.LLNS
@@ -95,7 +112,7 @@ find %{buildroot} -name '*.la' -delete
 %{_libexecdir}/flux/cmd/flux-account-update-usage.py
 
 # rc scripts
-%{_sysconfdir}/flux/rc1.d/01-flux-account-priority-update
+%config(noreplace) %{_sysconfdir}/flux/rc1.d/01-flux-account-priority-update
 
 # systemd unit file
 %{_unitdir}/flux-accounting.service

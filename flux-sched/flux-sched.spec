@@ -111,9 +111,9 @@ find %{buildroot} -name '*.la' -delete
 %doc README.md NEWS.md
 
 # rc1,3 files for fluxion
-%{_sysconfdir}/flux/rc1.d/01-sched-fluxion
-%{_sysconfdir}/flux/rc3.d/01-sched-fluxion
-%{_sysconfdir}/flux/modprobe/modprobe.d/fluxion.toml
+%config(noreplace) %{_sysconfdir}/flux/rc1.d/01-sched-fluxion
+%config(noreplace) %{_sysconfdir}/flux/rc3.d/01-sched-fluxion
+%config(noreplace) %{_sysconfdir}/flux/modprobe/modprobe.d/fluxion.toml
 %{_sysconfdir}/flux/modprobe/rc1.d/fluxion.py
 %{_libdir}/flux/modules/sched-fluxion-qmanager.so
 %{_libdir}/flux/modules/sched-fluxion-resource.so
@@ -124,11 +124,11 @@ find %{buildroot} -name '*.la' -delete
 %{_libexecdir}/flux/cmd/flux-ion-R.py
 # flux-ion-resource
 %{_libexecdir}/flux/cmd/flux-ion-resource.py
-%{python3_sitelib}/*
+%{python3_sitelib}/fluxion
 %{_libdir}/flux/python*
 
 # other libs
-%define nopatchversion %(longver=%{version}; shortver=${longver%.*}; echo ${shortver})
+%global nopatchversion %(longver=%{version}; shortver=${longver%.*}; echo ${shortver})
 %{_libdir}/libfluxion-data.so.%{version}
 %{_libdir}/libfluxion-data.so.%{nopatchversion}
 %{_libdir}/libsched-fluxion-resource-module.so

@@ -59,7 +59,6 @@ BuildRequires: krb5-devel
 Requires: lua >= 5.1
 Requires: lua-posix >= 5.1
 Requires: sqlite >= 3.6.0
-Requires: libuuid
 Requires: ncurses
 Requires: python3
 Requires: python3-cffi
@@ -151,6 +150,9 @@ export LC_ALL=en_US.UTF-8
 
 %ldconfig_scriptlets
 
+%post
+%systemd_post flux.service
+
 %preun
 # Stop the flux service on both removal and upgrade if active
 if /usr/bin/systemctl is-active --quiet flux.service 2>/dev/null; then
@@ -158,6 +160,10 @@ if /usr/bin/systemctl is-active --quiet flux.service 2>/dev/null; then
     echo "For progress, check: systemctl status flux"
     /usr/bin/systemctl stop flux.service
 fi
+%systemd_preun flux.service
+
+%postun
+%systemd_postun_with_restart flux.service
 
 %files
 %license LICENSE
@@ -210,6 +216,8 @@ fi
 %{_tmpfilesdir}/*
 
 # cronfiles
+%dir %{_sysconfdir}/flux/system
+%dir %{_sysconfdir}/flux/system/cron.d
 %{_sysconfdir}/flux/system/cron.d/kvs-backup.cron
 
 # bash completions
@@ -270,7 +278,8 @@ fi
 
 %files -n python3-flux
 # python binding
-%{python3_sitearch}/*
+%{python3_sitearch}/flux
+%{python3_sitearch}/_flux
 %{_libdir}/flux/python*
 
 %changelog

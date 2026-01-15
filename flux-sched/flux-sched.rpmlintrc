@@ -1,0 +1,5 @@
+# Domain-specific terms used in Flux scheduler
+addFilter("spelling-error.*(fluxion|qmanager)")
+
+# Internal libraries without standard soname - upstream build system issue
+addFilter("invalid-soname.*libsched-fluxion")
