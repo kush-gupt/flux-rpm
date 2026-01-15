@@ -417,7 +417,7 @@ jobs:
           # Additional dependencies - some may not exist on all distros
           ${{ matrix.pkg-manager }} install -y --allowerasing \
             cmake pkgconfig \
-            python3-cffi python3-pyyaml python3-jsonschema \
+            python3-cffi python3-pyyaml python3-jsonschema python3-sphinx \
             libuuid-devel jansson-devel lz4-devel libarchive-devel \
             hwloc-devel sqlite-devel ncurses-devel libsodium-devel zeromq-devel \
             lua lua-devel lua-posix \
@@ -458,9 +458,9 @@ jobs:
         working-directory: flux-core-src
         run: |
           # Configure to build test infrastructure against installed flux
+          # Note: Do NOT use --disable-docs as we need doc/man3/example/ programs
           ./configure --prefix=/usr \
             --with-flux-security \
-            --disable-docs \
             CFLAGS="-O2 -Wno-error" \
             PKG_CONFIG_PATH=/usr/lib64/pkgconfig
           
