@@ -409,6 +409,14 @@ jobs:
           name: rpms-${{ matrix.short-name }}
           path: ./rpms
 
+      - name: Setup ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ matrix.short-name }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ matrix.short-name }}-
+
       - name: Enable EPEL (CentOS/RHEL only)
         if: startsWith(matrix.distro, 'centos')
         run: |
@@ -423,7 +431,8 @@ jobs:
             make autoconf automake libtool gcc gcc-c++ \
             python3-devel python3-setuptools \
             curl tar gzip jq procps-ng hostname which diffutils findutils \
-            perl-Test-Harness perl-Time-HiRes
+            perl-Test-Harness perl-Time-HiRes \
+            ccache
           
           # Additional dependencies - some may not exist on all distros
           ${{ matrix.pkg-manager }} install -y --allowerasing \
@@ -447,6 +456,22 @@ jobs:
           # CentOS 9 ships GCC 11, but flux-sched requires GCC 12+
           # Install gcc-toolset-13 which provides GCC 13
           dnf install -y gcc-toolset-13-gcc gcc-toolset-13-gcc-c++
+
+      - name: Configure ccache
+        run: |
+          # Setup ccache for faster rebuilds
+          mkdir -p ~/.ccache
+          echo "max_size = 500M" > ~/.ccache/ccache.conf
+          echo "compression = true" >> ~/.ccache/ccache.conf
+          # Add ccache to PATH (check both common locations)
+          if [ -d /usr/lib64/ccache ]; then
+            echo "/usr/lib64/ccache" >> $GITHUB_PATH
+          elif [ -d /usr/lib/ccache ]; then
+            echo "/usr/lib/ccache" >> $GITHUB_PATH
+          fi
+          # Reset and show ccache stats
+          ccache --zero-stats || true
+          ccache --show-stats || true
 
       - name: Install and start munge
         run: |
@@ -733,6 +758,10 @@ jobs:
       # ============================================================
       # Summary
       # ============================================================
+      - name: Show ccache stats
+        if: always()
+        run: ccache --show-stats || true
+
       - name: Generate test summary
         if: always()
         run: |
@@ -745,6 +774,9 @@ jobs:
           echo "" >> test-summary.txt
           echo "Test environment:" >> test-summary.txt
           echo "  FLUX_TEST_INSTALLED_PATH=$FLUX_TEST_INSTALLED_PATH" >> test-summary.txt
+          echo "" >> test-summary.txt
+          echo "ccache stats:" >> test-summary.txt
+          ccache --show-stats >> test-summary.txt 2>/dev/null || echo "  ccache not available" >> test-summary.txt
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
