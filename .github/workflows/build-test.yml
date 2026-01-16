@@ -436,6 +436,29 @@ jobs:
           # Install gcc-toolset-13 which provides GCC 13
           dnf install -y gcc-toolset-13-gcc gcc-toolset-13-gcc-c++
 
+      - name: Install and start munge
+        run: |
+          # Install munge for flux-security tests
+          ${{ matrix.pkg-manager }} install -y munge munge-devel
+          
+          # Create munge key if it doesn't exist
+          if [ ! -f /etc/munge/munge.key ]; then
+            dd if=/dev/urandom bs=1 count=1024 > /etc/munge/munge.key 2>/dev/null
+            chown munge:munge /etc/munge/munge.key
+            chmod 400 /etc/munge/munge.key
+          fi
+          
+          # Fix munge directory permissions
+          chown -R munge:munge /etc/munge /var/log/munge /var/lib/munge /run/munge 2>/dev/null || true
+          chmod 755 /run/munge 2>/dev/null || mkdir -p /run/munge && chown munge:munge /run/munge
+          
+          # Start munge daemon
+          /sbin/runuser -u munge -- /usr/sbin/munged || /usr/sbin/munged -f 2>/dev/null &
+          sleep 2
+          
+          # Verify munge is working
+          munge -n | unmunge || echo "Warning: munge test failed, some tests may fail"
+
       - name: Install Flux RPMs
         run: |
           # Install all non-debug RPMs including devel packages for test builds
