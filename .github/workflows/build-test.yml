@@ -346,7 +346,7 @@ jobs:
     name: Integration Tests (${{ matrix.distro }})
     runs-on: ubuntu-latest
     needs: [build-all]
-    timeout-minutes: 60
+    timeout-minutes: 120
     # Don't let rawhide failures fail the entire workflow
     continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
@@ -390,6 +390,9 @@ jobs:
       FLUX_TEST_INSTALLED_PATH: /usr/bin
       TAP_DRIVER_QUIET: 1
       FLUX_TEST_TIMEOUT: 300
+      FLUX_TEST_SIZE_MAX: 5
+      FLUX_TESTS_LOGFILE: t
+      FLUX_ENABLE_VALGRIND_TEST: t
 
     steps:
       - uses: actions/checkout@v4
@@ -451,6 +454,7 @@ jobs:
           rpm -qa | grep -E '^(flux|python3-flux)' | sort
           
           # Record what's installed for conditional test steps
+          echo "FLUX_SECURITY_INSTALLED=$(rpm -q flux-security &>/dev/null && echo true || echo false)" >> $GITHUB_ENV
           echo "FLUX_CORE_INSTALLED=$(rpm -q flux-core &>/dev/null && echo true || echo false)" >> $GITHUB_ENV
           echo "FLUX_SCHED_INSTALLED=$(rpm -q flux-sched &>/dev/null && echo true || echo false)" >> $GITHUB_ENV
           echo "FLUX_ACCOUNTING_INSTALLED=$(rpm -q flux-accounting &>/dev/null && echo true || echo false)" >> $GITHUB_ENV
@@ -461,6 +465,42 @@ jobs:
           else
             echo "WARNING: flux-core not installed, skipping verification"
           fi
+
+      # ============================================================
+      # flux-security upstream tests
+      # ============================================================
+      - name: Download flux-security source for tests
+        if: env.FLUX_SECURITY_INSTALLED == 'true'
+        run: |
+          SEC_VER=$(rpm -q --qf '%{VERSION}' flux-security)
+          echo "Testing flux-security version: $SEC_VER"
+          curl -sL "https://github.com/flux-framework/flux-security/releases/download/v${SEC_VER}/flux-security-${SEC_VER}.tar.gz" \
+            -o flux-security.tar.gz
+          tar xzf flux-security.tar.gz
+          mv flux-security-${SEC_VER} flux-security-src
+
+      - name: Configure flux-security tests
+        if: env.FLUX_SECURITY_INSTALLED == 'true'
+        working-directory: flux-security-src
+        run: |
+          ./configure --prefix=/usr \
+            CFLAGS="-O2 -Wno-error" \
+            PKG_CONFIG_PATH=/usr/lib64/pkgconfig
+          make -j$(nproc)
+
+      - name: Run flux-security tests
+        id: security-tests
+        if: env.FLUX_SECURITY_INSTALLED == 'true'
+        continue-on-error: true
+        working-directory: flux-security-src
+        run: |
+          export FLUX_TESTS_LOGFILE=t
+          make -j$(nproc) check
+
+      - name: Recheck failed flux-security tests
+        if: env.FLUX_SECURITY_INSTALLED == 'true' && steps.security-tests.outcome == 'failure'
+        working-directory: flux-security-src/t
+        run: make -j$(nproc) recheck
 
       # ============================================================
       # flux-core upstream tests
@@ -491,37 +531,37 @@ jobs:
           make check TESTS= -j$(nproc) || true
 
       - name: Run flux-core tests
+        id: core-tests
         if: env.FLUX_CORE_INSTALLED == 'true'
-        working-directory: flux-core-src/t
+        continue-on-error: true
+        working-directory: flux-core-src
         run: |
           # Set up paths for test infrastructure
-          # The built flux commands (like flux-modprobe) must be in PATH
           export PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd:$PATH
-          
-          # Tell flux where to find additional subcommands from build tree
           export FLUX_EXEC_PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd
-          
-          # Python path for flux module built in tree
           export PYTHONPATH=$GITHUB_WORKSPACE/flux-core-src/src/bindings/python:$PYTHONPATH
           
           # Core test environment variables
           export FLUX_TEST_INSTALLED_PATH=/usr/bin
           export FLUX_BUILD_DIR=$GITHUB_WORKSPACE/flux-core-src
           export SHARNESS_BUILD_DIRECTORY=$GITHUB_WORKSPACE/flux-core-src
+          export FLUX_TEST_SIZE_MAX=5
+          export FLUX_TESTS_LOGFILE=t
           
-          # Run a selection of important tests (not the full suite for CI time)
-          # Note: t0001-basic.t excluded - has tests comparing build-tree config
-          # vs installed flux (e.g., Python interpreter path check)
-          prove -v --timer -j4 \
-            ./t0002-request.t \
-            ./t0003-module.t \
-            ./t0004-event.t \
-            ./t0005-exec.t \
-            ./t0007-ping.t \
-            ./t0008-attr.t \
-            ./t0009-dmesg.t \
-            ./t1000-kvs.t \
-            ./t1001-kvs-internals.t
+          # Run the full test suite
+          make -j$(nproc) check
+
+      - name: Recheck failed flux-core tests
+        if: env.FLUX_CORE_INSTALLED == 'true' && steps.core-tests.outcome == 'failure'
+        working-directory: flux-core-src/t
+        run: |
+          export PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd:$PATH
+          export FLUX_EXEC_PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd
+          export PYTHONPATH=$GITHUB_WORKSPACE/flux-core-src/src/bindings/python:$PYTHONPATH
+          export FLUX_TEST_INSTALLED_PATH=/usr/bin
+          export FLUX_BUILD_DIR=$GITHUB_WORKSPACE/flux-core-src
+          export SHARNESS_BUILD_DIRECTORY=$GITHUB_WORKSPACE/flux-core-src
+          make -j$(nproc) recheck
 
       # ============================================================
       # flux-sched upstream tests
@@ -567,10 +607,12 @@ jobs:
           make -j$(nproc)
 
       - name: Run flux-sched tests
+        id: sched-tests
         if: env.FLUX_SCHED_INSTALLED == 'true'
-        working-directory: flux-sched-src/t
+        continue-on-error: true
+        working-directory: flux-sched-src/build
         run: |
-          # Set up paths for test infrastructure (need flux-core build tree for flux-modprobe)
+          # Set up paths for test infrastructure
           export PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd:$PATH
           export FLUX_EXEC_PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd
           export PYTHONPATH=$GITHUB_WORKSPACE/flux-core-src/src/bindings/python:$PYTHONPATH
@@ -579,12 +621,23 @@ jobs:
           export FLUX_TEST_INSTALLED_PATH=/usr/bin
           export FLUX_BUILD_DIR=$GITHUB_WORKSPACE/flux-sched-src/build
           export SHARNESS_BUILD_DIRECTORY=$GITHUB_WORKSPACE/flux-sched-src/build
+          export FLUX_TEST_SIZE_MAX=5
+          export FLUX_TESTS_LOGFILE=t
           
-          # Run scheduler-specific tests
-          prove -v --timer -j2 \
-            ./t1001-qmanager-basic.t \
-            ./t1003-qmanager-policy.t \
-            ./t1010-sync-modules.t
+          # Run the full test suite
+          make -j$(nproc) check
+
+      - name: Recheck failed flux-sched tests
+        if: env.FLUX_SCHED_INSTALLED == 'true' && steps.sched-tests.outcome == 'failure'
+        working-directory: flux-sched-src/build/t
+        run: |
+          export PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd:$PATH
+          export FLUX_EXEC_PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd
+          export PYTHONPATH=$GITHUB_WORKSPACE/flux-core-src/src/bindings/python:$PYTHONPATH
+          export FLUX_TEST_INSTALLED_PATH=/usr/bin
+          export FLUX_BUILD_DIR=$GITHUB_WORKSPACE/flux-sched-src/build
+          export SHARNESS_BUILD_DIRECTORY=$GITHUB_WORKSPACE/flux-sched-src/build
+          make -j$(nproc) recheck
 
       # ============================================================
       # flux-accounting upstream tests
@@ -610,10 +663,12 @@ jobs:
           make check TESTS= -j$(nproc) || true
 
       - name: Run flux-accounting tests
+        id: accounting-tests
         if: env.FLUX_ACCOUNTING_INSTALLED == 'true'
-        working-directory: flux-accounting-src/t
+        continue-on-error: true
+        working-directory: flux-accounting-src
         run: |
-          # Set up paths for test infrastructure (need flux-core build tree for flux-modprobe)
+          # Set up paths for test infrastructure
           export PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd:$PATH
           export FLUX_EXEC_PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd
           export PYTHONPATH=$GITHUB_WORKSPACE/flux-core-src/src/bindings/python:$PYTHONPATH
@@ -622,12 +677,23 @@ jobs:
           export FLUX_TEST_INSTALLED_PATH=/usr/bin
           export FLUX_BUILD_DIR=$GITHUB_WORKSPACE/flux-accounting-src
           export SHARNESS_BUILD_DIRECTORY=$GITHUB_WORKSPACE/flux-accounting-src
+          export FLUX_TEST_SIZE_MAX=5
+          export FLUX_TESTS_LOGFILE=t
           
-          # Run accounting-specific tests
-          prove -v --timer -j2 \
-            ./t1001-mf-priority-basic.t \
-            ./t1007-flux-account-users.t \
-            ./t1008-mf-priority-update.t
+          # Run the full test suite
+          make -j$(nproc) check
+
+      - name: Recheck failed flux-accounting tests
+        if: env.FLUX_ACCOUNTING_INSTALLED == 'true' && steps.accounting-tests.outcome == 'failure'
+        working-directory: flux-accounting-src/t
+        run: |
+          export PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd:$PATH
+          export FLUX_EXEC_PATH=$GITHUB_WORKSPACE/flux-core-src/src/cmd
+          export PYTHONPATH=$GITHUB_WORKSPACE/flux-core-src/src/bindings/python:$PYTHONPATH
+          export FLUX_TEST_INSTALLED_PATH=/usr/bin
+          export FLUX_BUILD_DIR=$GITHUB_WORKSPACE/flux-accounting-src
+          export SHARNESS_BUILD_DIRECTORY=$GITHUB_WORKSPACE/flux-accounting-src
+          make -j$(nproc) recheck
 
       # ============================================================
       # Summary
@@ -652,6 +718,13 @@ jobs:
           name: test-results-${{ matrix.short-name }}
           path: |
             test-summary.txt
+            flux-security-src/t/*.log
+            flux-security-src/t/test-results/
+            flux-core-src/t/*.log
             flux-core-src/t/test-results/
+            flux-sched-src/t/*.log
+            flux-sched-src/build/t/*.log
             flux-sched-src/t/test-results/
+            flux-sched-src/build/t/test-results/
+            flux-accounting-src/t/*.log
             flux-accounting-src/t/test-results/
