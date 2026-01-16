@@ -393,6 +393,12 @@ jobs:
       FLUX_TEST_SIZE_MAX: 5
       FLUX_TESTS_LOGFILE: t
       FLUX_ENABLE_VALGRIND_TEST: t
+      # Prevent libfabrics psm3 connector errors in container
+      PSM3_HAL: loopback
+      # Prevent hwloc from trying to connect to X11/OpenGL
+      HWLOC_COMPONENTS: "-gl"
+      # Set locale for tests
+      LANG: C.UTF-8
 
     steps:
       - uses: actions/checkout@v4
@@ -417,7 +423,7 @@ jobs:
             make autoconf automake libtool gcc gcc-c++ \
             python3-devel python3-setuptools \
             curl tar gzip jq procps-ng hostname which diffutils findutils \
-            perl-Test-Harness
+            perl-Test-Harness perl-Time-HiRes
           
           # Additional dependencies - some may not exist on all distros
           ${{ matrix.pkg-manager }} install -y --allowerasing \
@@ -427,7 +433,13 @@ jobs:
             hwloc-devel sqlite-devel ncurses-devel libsodium-devel zeromq-devel \
             lua lua-devel lua-posix \
             boost-devel boost-graph boost-filesystem boost-system \
-            libedit-devel readline-devel yaml-cpp-devel || true
+            libedit-devel readline-devel yaml-cpp-devel \
+            valgrind valgrind-devel \
+            aspell aspell-en \
+            libfaketime \
+            pam-devel \
+            time \
+            glibc-langpack-en || true
 
       - name: Install GCC Toolset 13 (CentOS 9 only)
         if: matrix.short-name == 'el9'
