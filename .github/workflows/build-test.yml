@@ -248,11 +248,23 @@ jobs:
           restore-keys: |
             mock-${{ matrix.mock-release }}-
 
+      - name: Restore mock ccache
+        uses: actions/cache@v4
+        with:
+          path: /var/cache/mock/ccache
+          key: mock-ccache-${{ matrix.mock-release }}-${{ github.sha }}
+          restore-keys: |
+            mock-ccache-${{ matrix.mock-release }}-
+
       - name: List SRPMs
         run: ls -la ./srpms/
 
-      - name: Initialize mock
-        run: mock -r ${{ matrix.mock-release }} --init
+      - name: Initialize mock with ccache
+        run: |
+          # Initialize mock with ccache plugin enabled
+          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --init
+          # Show ccache stats if available
+          mock -r ${{ matrix.mock-release }} --chroot -- ccache --show-stats 2>/dev/null || true
 
       # ============================================================
       # Build flux-security
@@ -260,7 +272,7 @@ jobs:
       - name: Build flux-security
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --rebuild srpms/flux-security-*.src.rpm --resultdir=results-security 2>&1 | tee security-build.log
+          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --no-clean --no-cleanup-after --rebuild srpms/flux-security-*.src.rpm --resultdir=results-security 2>&1 | tee security-build.log
 
       - name: Install flux-security in mock
         run: |
@@ -276,7 +288,7 @@ jobs:
       - name: Build flux-core
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
+          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --no-clean --no-cleanup-after --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
 
       - name: Install flux-core in mock
         run: |
@@ -293,21 +305,30 @@ jobs:
       - name: Build flux-sched
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --rebuild srpms/flux-sched-*.src.rpm --resultdir=results-sched 2>&1 | tee sched-build.log
+          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --no-clean --no-cleanup-after --rebuild srpms/flux-sched-*.src.rpm --resultdir=results-sched 2>&1 | tee sched-build.log
 
       - name: Build flux-accounting
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results-accounting 2>&1 | tee accounting-build.log
+          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results-accounting 2>&1 | tee accounting-build.log
 
       # ============================================================
       # Generate summary and upload artifacts
       # ============================================================
+      - name: Show mock ccache stats
+        if: always()
+        run: |
+          echo "=== Mock ccache stats ==="
+          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --chroot -- ccache --show-stats 2>/dev/null || echo "ccache stats not available"
+
       - name: Generate build summary
         if: always()
         run: |
           echo "=== Build Summary for ${{ matrix.mock-release }} ===" | tee build-summary.txt
           echo "Build completed: $(date)" >> build-summary.txt
+          echo "" >> build-summary.txt
+          echo "=== ccache stats ===" >> build-summary.txt
+          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --chroot -- ccache --show-stats 2>/dev/null >> build-summary.txt || echo "ccache stats not available" >> build-summary.txt
           echo "" >> build-summary.txt
           echo "=== flux-security packages ===" >> build-summary.txt
           ls -la results-security/*.rpm 2>/dev/null | grep -v debuginfo >> build-summary.txt || echo "No packages" >> build-summary.txt
