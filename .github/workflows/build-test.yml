@@ -417,7 +417,7 @@ jobs:
           echo "=== Installed Flux packages ==="
           rpm -qa | grep -E '^(flux|python3-flux)' | sort
 
-      - name: Verify flux-core CLI
+      - name: Verify flux-core CLI (standalone)
         run: |
           echo "=== flux --version ==="
           flux --version
@@ -425,11 +425,8 @@ jobs:
           echo "=== flux --help ==="
           flux --help
           
-          echo "=== flux jobs --help ==="
-          flux jobs --help
-          
-          echo "=== flux submit --help ==="
-          flux submit --help
+          echo "=== flux start --help ==="
+          flux start --help
 
       - name: Verify Python bindings
         run: |
@@ -437,16 +434,25 @@ jobs:
           python3 -c "import flux; print('flux module version:', flux.__version__)"
           python3 -c "from flux import Flux; print('Flux class imported successfully')"
 
-      - name: Verify flux can start
+      - name: Verify flux instance commands
         run: |
           echo "=== flux start with simple command ==="
           timeout 30 flux start echo "Hello from flux!"
           
-          echo "=== flux start with uptime ==="
-          timeout 30 flux start flux uptime
-          
-          echo "=== flux start listing jobs ==="
-          timeout 30 flux start flux jobs || echo "flux jobs completed"
+          echo "=== Testing flux commands inside instance ==="
+          timeout 60 flux start sh -c '
+            echo "=== flux uptime ==="
+            flux uptime
+            
+            echo "=== flux jobs ==="
+            flux jobs
+            
+            echo "=== flux resource list ==="
+            flux resource list
+            
+            echo "=== flux submit --help ==="
+            flux submit --help
+          '
 
       - name: Verify flux-sched modules (if installed)
         run: |
