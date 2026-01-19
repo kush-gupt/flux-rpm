@@ -251,40 +251,21 @@ jobs:
           restore-keys: |
             mock-${{ matrix.mock-release }}-
 
-      # Restore ccache from previous runs (stored outside mock chroot to survive cleanup)
-      - name: Restore ccache
-        uses: actions/cache@v4
-        with:
-          path: /tmp/ccache-${{ matrix.mock-release }}
-          key: ccache-${{ matrix.mock-release }}-${{ github.sha }}
-          restore-keys: |
-            ccache-${{ matrix.mock-release }}-
-
       - name: List SRPMs
         run: ls -la ./srpms/
 
       - name: Initialize mock with ccache
         run: |
           # Initialize mock with ccache plugin enabled
+          # Mock's ccache plugin stores data at /var/cache/mock/<chroot>/ccache/
+          # which is included in our mock cache restore above
           mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --init
-          # Show ccache stats if available
+          
+          echo "=== Mock ccache location ==="
+          ls -la /var/cache/mock/${{ matrix.mock-release }}/ccache/ 2>/dev/null || echo "ccache dir not yet created"
+          
+          echo "=== Checking ccache stats after init ==="
           mock -r ${{ matrix.mock-release }} --chroot -- ccache --show-stats 2>/dev/null || true
-
-      # Inject saved ccache into mock chroot (ccache data lives inside chroot and is destroyed by cleanup)
-      - name: Inject ccache into mock
-        run: |
-          CCACHE_SRC="/tmp/ccache-${{ matrix.mock-release }}"
-          CCACHE_DST="/var/lib/mock/${{ matrix.mock-release }}/root/root/.ccache"
-          if [ -d "$CCACHE_SRC" ] && [ "$(ls -A $CCACHE_SRC 2>/dev/null)" ]; then
-            echo "=== Restoring ccache from previous run ==="
-            mkdir -p "$CCACHE_DST"
-            cp -r "$CCACHE_SRC"/* "$CCACHE_DST"/ 2>/dev/null || true
-            echo "Restored ccache contents:"
-            ls -la "$CCACHE_DST"/ 2>/dev/null | head -20 || true
-            du -sh "$CCACHE_DST" 2>/dev/null || true
-          else
-            echo "No previous ccache data found, starting fresh"
-          fi
 
       # ============================================================
       # Build flux-security
@@ -403,12 +384,6 @@ jobs:
       # ============================================================
       # Generate summary and upload artifacts
       # ============================================================
-      - name: Show mock ccache stats
-        if: always()
-        run: |
-          echo "=== Mock ccache stats ==="
-          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --chroot -- ccache --show-stats 2>/dev/null || echo "ccache stats not available"
-
       - name: Generate build summary
         if: always()
         run: |
@@ -443,31 +418,18 @@ jobs:
             *-build.log
             build-summary.txt
 
-      # Save ccache BEFORE mock cleanup destroys the chroot
-      # This persists compiler cache to speed up subsequent builds
-      - name: Save ccache for next run
+      # Show final ccache stats before cleanup
+      # Mock's ccache plugin stores data at /var/cache/mock/<chroot>/ccache/
+      # which is automatically saved by our mock cache step above
+      - name: Show final ccache stats
         if: always()
         run: |
-          CCACHE_SRC="/var/lib/mock/${{ matrix.mock-release }}/root/root/.ccache"
-          CCACHE_DST="/tmp/ccache-${{ matrix.mock-release }}"
+          echo "=== Final ccache statistics ==="
+          mock -r ${{ matrix.mock-release }} --chroot -- ccache --show-stats 2>/dev/null || echo "ccache stats not available"
           
-          echo "=== Saving ccache for next run ==="
-          mkdir -p "$CCACHE_DST"
-          
-          if [ -d "$CCACHE_SRC" ] && [ "$(ls -A $CCACHE_SRC 2>/dev/null)" ]; then
-            # Clear old cache and copy new data
-            rm -rf "$CCACHE_DST"/*
-            cp -r "$CCACHE_SRC"/* "$CCACHE_DST"/ 2>/dev/null || true
-            
-            echo "=== Saved ccache stats ==="
-            du -sh "$CCACHE_DST" 2>/dev/null || true
-            ls -la "$CCACHE_DST"/ 2>/dev/null | head -20 || true
-            
-            # Show ccache statistics
-            mock -r ${{ matrix.mock-release }} --chroot -- ccache --show-stats 2>/dev/null || true
-          else
-            echo "No ccache data to save"
-          fi
+          echo "=== Mock ccache directory size ==="
+          du -sh /var/cache/mock/${{ matrix.mock-release }}/ccache/ 2>/dev/null || echo "ccache dir not found"
+          ls -la /var/cache/mock/${{ matrix.mock-release }}/ccache/ 2>/dev/null | head -10 || true
 
       - name: Cleanup mock
         if: always()
