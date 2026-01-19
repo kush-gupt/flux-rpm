@@ -176,7 +176,9 @@ fi
 # commands + other executables
 %{_bindir}/flux
 %{_bindir}/flux-python
-%{_libexecdir}/flux
+
+# libexec directory with cmd subcommands, shell, imp, etc.
+%{_libexecdir}/flux/
 
 # this package owns top level libdir/flux
 %dir %{_libdir}/flux
@@ -233,28 +235,16 @@ fi
 %{_datadir}/lua/*/fluxometer
 %{_datadir}/lua/*/fluxometer.lua
 
-# rc scripts
+# rc scripts (legacy, pre-0.78.0)
 %dir %{_sysconfdir}/flux
 %dir %{_sysconfdir}/flux/rc1.d
 %dir %{_sysconfdir}/flux/rc3.d
 
-# modprobe + dirs
+# modprobe configuration dirs (sysconfdir for admin overrides)
 %dir %{_sysconfdir}/flux/modprobe
 %dir %{_sysconfdir}/flux/modprobe/modprobe.d
 %dir %{_sysconfdir}/flux/modprobe/rc1.d
 %dir %{_sysconfdir}/flux/modprobe/rc3.d
-%dir %{_datadir}/flux/modprobe/modprobe.d
-%dir %{_libexecdir}/flux/modprobe/rc1.d
-%dir %{_libexecdir}/flux/modprobe/rc3.d
-%{_datadir}/flux/modprobe/modprobe.toml
-%{_libexecdir}/flux/modprobe/rc1.py
-%{_libexecdir}/flux/modprobe/rc3.py
-
-# flux-run-system-scripts + dirs
-%{_libexecdir}/flux/flux-run-system-scripts
-%dir %{_libexecdir}/flux/prolog.d
-%dir %{_libexecdir}/flux/epilog.d
-%dir %{_libexecdir}/flux/housekeeping.d
 
 # systemd unit file(s)
 %{_unitdir}/*.service

@@ -321,7 +321,6 @@ jobs:
 
       # ============================================================
       # Build flux-sched and flux-accounting in parallel (both depend only on core)
-      # This saves ~4 minutes by building concurrently instead of sequentially
       # ============================================================
       
       # Prepare a separate chroot for flux-accounting (needed to avoid mock lock contention)
@@ -549,6 +548,12 @@ jobs:
           echo "=== flux --help ==="
           flux --help
           
+          echo "=== Flux subcommands in libexec ==="
+          ls -la /usr/libexec/flux/cmd/ 2>/dev/null | head -30 || echo "cmd dir not found"
+          
+          echo "=== Check for flux-modprobe ==="
+          ls -la /usr/libexec/flux/cmd/flux-modprobe* 2>/dev/null || echo "flux-modprobe not found in cmd"
+          
           echo "=== flux start --help ==="
           flux start --help
 
@@ -560,11 +565,16 @@ jobs:
 
       - name: Verify flux instance commands
         run: |
-          echo "=== flux start with simple command ==="
-          timeout 30 flux start echo "Hello from flux!"
+          # Use minimal mode: set empty rc1/rc3 paths to skip broker startup scripts
+          # This matches flux-core's "minimal" personality in test_under_flux()
+          # See: https://github.com/flux-framework/flux-core/blob/master/t/sharness.d/flux-sharness.sh
+          FLUX_START_OPTS="-o,-Sbroker.rc1_path=,-Sbroker.rc3_path="
+          
+          echo "=== flux start with simple command (minimal mode) ==="
+          timeout 30 flux start $FLUX_START_OPTS echo "Hello from flux!"
           
           echo "=== Testing flux commands inside instance ==="
-          timeout 60 flux start sh -c '
+          timeout 60 flux start $FLUX_START_OPTS sh -c '
             echo "=== flux uptime ==="
             flux uptime
             
@@ -580,12 +590,15 @@ jobs:
 
       - name: Verify flux-sched modules (if installed)
         run: |
+          # Use minimal mode for testing
+          FLUX_START_OPTS="-o,-Sbroker.rc1_path=,-Sbroker.rc3_path="
+          
           if rpm -q flux-sched &>/dev/null; then
             echo "=== flux-sched installed, verifying modules ==="
             ls -la /usr/lib64/flux/modules/sched* || true
             
             echo "=== Testing sched module loading ==="
-            timeout 60 flux start -o,-Smodule-path=/usr/lib64/flux/modules \
+            timeout 60 flux start $FLUX_START_OPTS -o,-Smodule-path=/usr/lib64/flux/modules \
               sh -c 'flux module load sched-fluxion-resource && flux module load sched-fluxion-qmanager && flux module list' \
               || echo "Sched module test completed"
           else
@@ -594,6 +607,9 @@ jobs:
 
       - name: Verify flux-accounting (if installed)
         run: |
+          # Use minimal mode for testing
+          FLUX_START_OPTS="-o,-Sbroker.rc1_path=,-Sbroker.rc3_path="
+          
           if rpm -q flux-accounting &>/dev/null; then
             echo "=== flux-accounting installed ==="
             # Check that the flux-accounting plugin files exist
@@ -602,7 +618,7 @@ jobs:
             
             # flux account requires a running flux instance, test within flux start
             echo "=== Testing flux account command ==="
-            timeout 30 flux start flux account --help || echo "flux account test completed"
+            timeout 30 flux start $FLUX_START_OPTS flux account --help || echo "flux account test completed"
           else
             echo "flux-accounting not installed, skipping"
           fi
