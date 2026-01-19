@@ -425,11 +425,11 @@ jobs:
           echo "=== flux --help ==="
           flux --help
           
-          echo "=== flux resource --help ==="
-          flux resource --help
+          echo "=== flux jobs --help ==="
+          flux jobs --help
           
-          echo "=== flux job --help ==="
-          flux job --help
+          echo "=== flux submit --help ==="
+          flux submit --help
 
       - name: Verify Python bindings
         run: |
@@ -439,11 +439,14 @@ jobs:
 
       - name: Verify flux can start
         run: |
-          echo "=== Starting flux instance ==="
-          timeout 30 flux start flux resource list || echo "flux start completed"
-          
           echo "=== flux start with simple command ==="
-          timeout 30 flux start echo "Hello from flux!" || echo "Command completed"
+          timeout 30 flux start echo "Hello from flux!"
+          
+          echo "=== flux start with uptime ==="
+          timeout 30 flux start flux uptime
+          
+          echo "=== flux start listing jobs ==="
+          timeout 30 flux start flux jobs || echo "flux jobs completed"
 
       - name: Verify flux-sched modules (if installed)
         run: |
@@ -463,7 +466,13 @@ jobs:
         run: |
           if rpm -q flux-accounting &>/dev/null; then
             echo "=== flux-accounting installed ==="
-            flux account --help || echo "flux account help completed"
+            # Check that the flux-accounting plugin files exist
+            ls -la /usr/lib64/flux/python*/fluxacct* 2>/dev/null || true
+            ls -la /usr/libexec/flux/cmd/flux-account* 2>/dev/null || true
+            
+            # flux account requires a running flux instance, test within flux start
+            echo "=== Testing flux account command ==="
+            timeout 30 flux start flux account --help || echo "flux account test completed"
           else
             echo "flux-accounting not installed, skipping"
           fi
