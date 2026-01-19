@@ -178,7 +178,22 @@ fi
 %{_bindir}/flux-python
 
 # libexec directory with cmd subcommands, shell, imp, etc.
-%{_libexecdir}/flux/
+# Use explicit patterns to ensure all Python subcommands are included
+%dir %{_libexecdir}/flux
+%dir %{_libexecdir}/flux/cmd
+%{_libexecdir}/flux/cmd/*
+%{_libexecdir}/flux/flux-shell
+%{_libexecdir}/flux/flux-imp
+# modprobe scripts
+%dir %{_libexecdir}/flux/modprobe
+%dir %{_libexecdir}/flux/modprobe/rc1.d
+%dir %{_libexecdir}/flux/modprobe/rc3.d
+%{_libexecdir}/flux/modprobe/*.py
+# system scripts
+%{_libexecdir}/flux/flux-run-system-scripts
+%dir %{_libexecdir}/flux/prolog.d
+%dir %{_libexecdir}/flux/epilog.d
+%dir %{_libexecdir}/flux/housekeeping.d
 
 # this package owns top level libdir/flux
 %dir %{_libdir}/flux
