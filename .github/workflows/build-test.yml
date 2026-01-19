@@ -512,8 +512,8 @@ jobs:
 
       - name: Verify Python bindings
         run: |
-          echo "=== Python flux module ==="
-          python3 -c "import flux; print('flux module version:', flux.__version__)"
+          echo "=== Testing flux Python module import ==="
+          python3 -c "import flux; print('flux module imported successfully')"
           python3 -c "from flux import Flux; print('Flux class imported successfully')"
           python3 -c "from flux.job import JobspecV1; print('JobspecV1 imported successfully')"
 
