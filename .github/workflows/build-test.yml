@@ -251,6 +251,15 @@ jobs:
           restore-keys: |
             mock-${{ matrix.mock-release }}-
 
+      # Restore ccache from previous runs (stored outside mock chroot to survive cleanup)
+      - name: Restore ccache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/ccache-${{ matrix.mock-release }}
+          key: ccache-${{ matrix.mock-release }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ matrix.mock-release }}-
+
       - name: List SRPMs
         run: ls -la ./srpms/
 
@@ -260,6 +269,22 @@ jobs:
           mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --init
           # Show ccache stats if available
           mock -r ${{ matrix.mock-release }} --chroot -- ccache --show-stats 2>/dev/null || true
+
+      # Inject saved ccache into mock chroot (ccache data lives inside chroot and is destroyed by cleanup)
+      - name: Inject ccache into mock
+        run: |
+          CCACHE_SRC="/tmp/ccache-${{ matrix.mock-release }}"
+          CCACHE_DST="/var/lib/mock/${{ matrix.mock-release }}/root/root/.ccache"
+          if [ -d "$CCACHE_SRC" ] && [ "$(ls -A $CCACHE_SRC 2>/dev/null)" ]; then
+            echo "=== Restoring ccache from previous run ==="
+            mkdir -p "$CCACHE_DST"
+            cp -r "$CCACHE_SRC"/* "$CCACHE_DST"/ 2>/dev/null || true
+            echo "Restored ccache contents:"
+            ls -la "$CCACHE_DST"/ 2>/dev/null | head -20 || true
+            du -sh "$CCACHE_DST" 2>/dev/null || true
+          else
+            echo "No previous ccache data found, starting fresh"
+          fi
 
       # ============================================================
       # Build flux-security
@@ -295,17 +320,86 @@ jobs:
           mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --install "$CORE_RPM" "$CORE_DEVEL_RPM" "$PYTHON_RPM"
 
       # ============================================================
-      # Build flux-sched and flux-accounting (both depend on core)
+      # Build flux-sched and flux-accounting in parallel (both depend only on core)
+      # This saves ~4 minutes by building concurrently instead of sequentially
       # ============================================================
-      - name: Build flux-sched
+      
+      # Prepare a separate chroot for flux-accounting (needed to avoid mock lock contention)
+      - name: Prepare parallel build chroot for flux-accounting
         run: |
-          set -o pipefail
-          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --no-clean --no-cleanup-after --rebuild srpms/flux-sched-*.src.rpm --resultdir=results-sched 2>&1 | tee sched-build.log
+          echo "=== Initializing separate chroot for flux-accounting ==="
+          # Initialize a separate chroot with ccache
+          mock -r ${{ matrix.mock-release }} --uniqueext=accounting --enable-plugin=ccache --init
+          
+          # Install flux-security and flux-core into the accounting chroot
+          SECURITY_RPM=$(ls results-security/flux-security-[0-9]*.x86_64.rpm | head -1)
+          SECURITY_DEVEL_RPM=$(ls results-security/flux-security-devel-*.x86_64.rpm | head -1)
+          CORE_RPM=$(ls results-core/flux-core-[0-9]*.x86_64.rpm | head -1)
+          CORE_DEVEL_RPM=$(ls results-core/flux-core-devel-*.x86_64.rpm | head -1)
+          PYTHON_RPM=$(ls results-core/python3-flux-[0-9]*.x86_64.rpm | head -1)
+          
+          echo "Installing dependencies into accounting chroot:"
+          echo "  $SECURITY_RPM $SECURITY_DEVEL_RPM"
+          echo "  $CORE_RPM $CORE_DEVEL_RPM $PYTHON_RPM"
+          
+          mock -r ${{ matrix.mock-release }} --uniqueext=accounting \
+            --no-clean --no-cleanup-after \
+            --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM" "$CORE_RPM" "$CORE_DEVEL_RPM" "$PYTHON_RPM"
+          
+          # Copy ccache data to the accounting chroot
+          CCACHE_SRC="/var/lib/mock/${{ matrix.mock-release }}/root/root/.ccache"
+          CCACHE_DST="/var/lib/mock/${{ matrix.mock-release }}-accounting/root/root/.ccache"
+          if [ -d "$CCACHE_SRC" ]; then
+            mkdir -p "$CCACHE_DST"
+            cp -r "$CCACHE_SRC"/* "$CCACHE_DST"/ 2>/dev/null || true
+            echo "Copied ccache to accounting chroot"
+          fi
 
-      - name: Build flux-accounting
+      - name: Build flux-sched and flux-accounting (parallel)
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --no-clean --rebuild srpms/flux-accounting-*.src.rpm --resultdir=results-accounting 2>&1 | tee accounting-build.log
+          
+          # Build flux-sched in the main chroot (background)
+          echo "=== Starting flux-sched build (background) ==="
+          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache \
+            --no-clean --no-cleanup-after \
+            --rebuild srpms/flux-sched-*.src.rpm \
+            --resultdir=results-sched 2>&1 | tee sched-build.log &
+          SCHED_PID=$!
+          
+          # Build flux-accounting in the separate chroot (background)
+          echo "=== Starting flux-accounting build (background) ==="
+          mock -r ${{ matrix.mock-release }} --uniqueext=accounting --enable-plugin=ccache \
+            --no-clean --no-cleanup-after \
+            --rebuild srpms/flux-accounting-*.src.rpm \
+            --resultdir=results-accounting 2>&1 | tee accounting-build.log &
+          ACCT_PID=$!
+          
+          echo "=== Waiting for parallel builds to complete ==="
+          echo "flux-sched PID: $SCHED_PID"
+          echo "flux-accounting PID: $ACCT_PID"
+          
+          # Wait for both builds and capture exit codes
+          SCHED_EXIT=0
+          ACCT_EXIT=0
+          wait $SCHED_PID || SCHED_EXIT=$?
+          wait $ACCT_PID || ACCT_EXIT=$?
+          
+          echo "=== Parallel builds completed ==="
+          echo "flux-sched exit code: $SCHED_EXIT"
+          echo "flux-accounting exit code: $ACCT_EXIT"
+          
+          # Fail if either build failed
+          if [ $SCHED_EXIT -ne 0 ]; then
+            echo "ERROR: flux-sched build failed"
+            exit $SCHED_EXIT
+          fi
+          if [ $ACCT_EXIT -ne 0 ]; then
+            echo "ERROR: flux-accounting build failed"
+            exit $ACCT_EXIT
+          fi
+          
+          echo "=== Both builds succeeded ==="
 
       # ============================================================
       # Generate summary and upload artifacts
@@ -350,9 +444,39 @@ jobs:
             *-build.log
             build-summary.txt
 
+      # Save ccache BEFORE mock cleanup destroys the chroot
+      # This persists compiler cache to speed up subsequent builds
+      - name: Save ccache for next run
+        if: always()
+        run: |
+          CCACHE_SRC="/var/lib/mock/${{ matrix.mock-release }}/root/root/.ccache"
+          CCACHE_DST="/tmp/ccache-${{ matrix.mock-release }}"
+          
+          echo "=== Saving ccache for next run ==="
+          mkdir -p "$CCACHE_DST"
+          
+          if [ -d "$CCACHE_SRC" ] && [ "$(ls -A $CCACHE_SRC 2>/dev/null)" ]; then
+            # Clear old cache and copy new data
+            rm -rf "$CCACHE_DST"/*
+            cp -r "$CCACHE_SRC"/* "$CCACHE_DST"/ 2>/dev/null || true
+            
+            echo "=== Saved ccache stats ==="
+            du -sh "$CCACHE_DST" 2>/dev/null || true
+            ls -la "$CCACHE_DST"/ 2>/dev/null | head -20 || true
+            
+            # Show ccache statistics
+            mock -r ${{ matrix.mock-release }} --chroot -- ccache --show-stats 2>/dev/null || true
+          else
+            echo "No ccache data to save"
+          fi
+
       - name: Cleanup mock
         if: always()
-        run: mock -r ${{ matrix.mock-release }} --clean
+        run: |
+          # Clean up main mock chroot
+          mock -r ${{ matrix.mock-release }} --clean
+          # Clean up parallel build chroot (if it exists)
+          mock -r ${{ matrix.mock-release }} --uniqueext=accounting --clean 2>/dev/null || true
 
   # ============================================================
   # Smoke Tests - Basic verification that installed RPMs work

@@ -40,6 +40,14 @@ RUN useradd -m builder \
     && mkdir -p /home/builder/rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS} \
     && chown -R builder:builder /home/builder/rpmbuild
 
+# Configure ccache defaults for faster rebuilds
+# - 2GB max size to handle all flux packages
+# - Compression enabled to reduce cache storage
+RUN mkdir -p /etc/ccache.conf.d && \
+    echo "max_size = 2G" > /etc/ccache.conf && \
+    echo "compression = true" >> /etc/ccache.conf && \
+    echo "compression_level = 6" >> /etc/ccache.conf
+
 # Set working directory
 WORKDIR /workspace
 
