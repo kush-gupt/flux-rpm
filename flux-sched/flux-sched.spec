@@ -10,6 +10,9 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 # GCC bug: https://gcc.gnu.org/bugzilla/
 Patch0:  gcc15-ice-workaround.patch
 
+# Redhat only provides /usr/bin/false, but tests look for /bin/false
+%global __requires_exclude /bin/false
+
 # Exclude flux Python subcommands from shebang mangling - these files are run
 # through the `flux python` wrapper and don't have shebangs by design. Without
 # this, brp-mangle-shebangs strips the executable bit, breaking `flux ion-resource`.
