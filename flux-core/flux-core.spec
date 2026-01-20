@@ -15,6 +15,11 @@ Patch0: const-correctness.patch
 # in their build but Fedora's optflags may override this with -Werror variants.
 %global optflags %{optflags} -Wno-error=strict-aliasing
 
+# Exclude flux Python subcommands from shebang mangling - these files are run
+# through the `flux python` wrapper and don't have shebangs by design. Without
+# this, brp-mangle-shebangs strips the executable bit we set, breaking `flux modprobe`.
+%global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/
+
 BuildRequires: flux-security-devel >= 0.14
 
 BuildRequires: pkgconfig(libzmq) >= 4.1.4
@@ -140,18 +145,10 @@ find %{buildroot} -name '*.la' -delete
 
 # Python subcommand permissions - flux requires .py files to be executable
 # (checked via access(path, R_OK|X_OK) in exec_subcommand_py)
-echo "=== DEBUG: Setting .py file permissions ==="
-echo "buildroot=%{buildroot}"
-echo "libexecdir=%{_libexecdir}"
-echo "Looking in: %{buildroot}%{_libexecdir}/flux/cmd"
-ls -la %{buildroot}%{_libexecdir}/flux/cmd/*.py 2>&1 | head -5 || echo "No .py files found in cmd"
+# These files are run through `flux python` wrapper, not directly, so they
+# don't have shebangs. We set them executable and exclude from shebang mangling.
 find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
-echo "After chmod cmd:"
-ls -la %{buildroot}%{_libexecdir}/flux/cmd/*.py 2>&1 | head -5 || echo "No .py files found"
 find %{buildroot}%{_libexecdir}/flux/modprobe -name '*.py' -exec chmod 755 {} \;
-echo "After chmod modprobe:"
-ls -la %{buildroot}%{_libexecdir}/flux/modprobe/*.py 2>&1 | head -5 || echo "No .py files found"
-echo "=== DEBUG END ==="
 
 # Create directories owned by package
 mkdir -p -m 0755 %{buildroot}%{_sysconfdir}/flux/rc3.d
