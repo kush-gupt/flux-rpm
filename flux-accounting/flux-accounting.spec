@@ -10,6 +10,11 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 # Backport of automake 1.16.5+ fix for py-compile
 Patch0:  py-compile-python312.patch
 
+# Exclude flux Python subcommands from shebang mangling - these files are run
+# through the `flux python` wrapper and don't have shebangs by design. Without
+# this, brp-mangle-shebangs strips the executable bit we set, breaking `flux account`.
+%global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/
+
 BuildRequires: pkgconfig(jansson) >= 2.10
 BuildRequires: pkgconfig(sqlite3)
 BuildRequires: python3
@@ -73,6 +78,11 @@ find %{buildroot} -name '*.la' -delete
 # Remove shebangs from non-executable Python modules to fix rpmlint errors
 find %{buildroot}%{python3_sitearch}/fluxacct -name '*.py' -type f ! -perm /111 \
     -exec sed -i '1{/^#!/d}' {} \;
+
+# Python subcommand permissions - flux requires .py files to be executable
+# (checked via access(path, R_OK|X_OK) in exec_subcommand_py)
+# These files are run through `flux python` wrapper, not directly.
+find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 
 %check
 # Tests cannot run in mock/koji build environments because:

@@ -15,6 +15,11 @@ Patch0: const-correctness.patch
 # in their build but Fedora's optflags may override this with -Werror variants.
 %global optflags %{optflags} -Wno-error=strict-aliasing
 
+# Exclude flux Python subcommands from shebang mangling - these files are run
+# through the `flux python` wrapper and don't have shebangs by design. Without
+# this, brp-mangle-shebangs strips the executable bit we set, breaking `flux modprobe`.
+%global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/
+
 BuildRequires: flux-security-devel >= 0.14
 
 BuildRequires: pkgconfig(libzmq) >= 4.1.4
@@ -138,6 +143,13 @@ find %{buildroot} \
 # do not package .la files
 find %{buildroot} -name '*.la' -delete
 
+# Python subcommand permissions - flux requires .py files to be executable
+# (checked via access(path, R_OK|X_OK) in exec_subcommand_py)
+# These files are run through `flux python` wrapper, not directly, so they
+# don't have shebangs. We set them executable and exclude from shebang mangling.
+find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
+find %{buildroot}%{_libexecdir}/flux/modprobe -name '*.py' -exec chmod 755 {} \;
+
 # Create directories owned by package
 mkdir -p -m 0755 %{buildroot}%{_sysconfdir}/flux/rc3.d
 mkdir -p -m 0755 %{buildroot}%{_sysconfdir}/flux/rc1.d
@@ -176,6 +188,8 @@ fi
 # commands + other executables
 %{_bindir}/flux
 %{_bindir}/flux-python
+
+# libexec directory - includes cmd/, modprobe/, shell, etc.
 %{_libexecdir}/flux
 
 # this package owns top level libdir/flux
@@ -233,28 +247,16 @@ fi
 %{_datadir}/lua/*/fluxometer
 %{_datadir}/lua/*/fluxometer.lua
 
-# rc scripts
+# rc scripts (legacy, pre-0.78.0)
 %dir %{_sysconfdir}/flux
 %dir %{_sysconfdir}/flux/rc1.d
 %dir %{_sysconfdir}/flux/rc3.d
 
-# modprobe + dirs
+# modprobe configuration dirs (sysconfdir for admin overrides)
 %dir %{_sysconfdir}/flux/modprobe
 %dir %{_sysconfdir}/flux/modprobe/modprobe.d
 %dir %{_sysconfdir}/flux/modprobe/rc1.d
 %dir %{_sysconfdir}/flux/modprobe/rc3.d
-%dir %{_datadir}/flux/modprobe/modprobe.d
-%dir %{_libexecdir}/flux/modprobe/rc1.d
-%dir %{_libexecdir}/flux/modprobe/rc3.d
-%{_datadir}/flux/modprobe/modprobe.toml
-%{_libexecdir}/flux/modprobe/rc1.py
-%{_libexecdir}/flux/modprobe/rc3.py
-
-# flux-run-system-scripts + dirs
-%{_libexecdir}/flux/flux-run-system-scripts
-%dir %{_libexecdir}/flux/prolog.d
-%dir %{_libexecdir}/flux/epilog.d
-%dir %{_libexecdir}/flux/housekeeping.d
 
 # systemd unit file(s)
 %{_unitdir}/*.service

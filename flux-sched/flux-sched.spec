@@ -10,6 +10,14 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 # GCC bug: https://gcc.gnu.org/bugzilla/
 Patch0:  gcc15-ice-workaround.patch
 
+# Redhat only provides /usr/bin/false, but tests look for /bin/false
+%global __requires_exclude /bin/false
+
+# Exclude flux Python subcommands from shebang mangling - these files are run
+# through the `flux python` wrapper and don't have shebangs by design. Without
+# this, brp-mangle-shebangs strips the executable bit, breaking `flux ion-resource`.
+%global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/
+
 # Can't use binary annotations for some reason:
 %undefine _annotated_build
 
@@ -107,6 +115,11 @@ export PYTHON=/usr/bin/python3
 %install
 %cmake_install
 find %{buildroot} -name '*.la' -delete
+
+# Python subcommand permissions - flux requires .py files to be executable
+# (checked via access(path, R_OK|X_OK) in exec_subcommand_py)
+# These files are run through `flux python` wrapper, not directly.
+find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 
 %ldconfig_scriptlets
 
