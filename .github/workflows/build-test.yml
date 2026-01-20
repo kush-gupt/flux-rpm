@@ -525,9 +525,15 @@ jobs:
           echo "=== MUNGE started ==="
           
           # Create test user (flux prefers non-root)
-          groupadd -g 1000 fluxuser 2>/dev/null || true
-          useradd -u 1000 -g fluxuser -m -s /bin/bash fluxuser 2>/dev/null || true
-          echo "=== Test user created ==="
+          # Don't force specific UID/GID - they may already be in use (e.g., rawhide)
+          if ! id fluxuser &>/dev/null; then
+            groupadd fluxuser || true
+            useradd -g fluxuser -m -s /bin/bash fluxuser
+            echo "=== Test user created ==="
+          else
+            echo "=== Test user fluxuser already exists ==="
+          fi
+          id fluxuser
 
       - name: Setup flux environment
         run: |
