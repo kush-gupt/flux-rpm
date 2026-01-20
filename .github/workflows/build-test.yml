@@ -425,11 +425,18 @@ jobs:
         if: always()
         run: |
           echo "=== Final ccache statistics ==="
-          mock -r ${{ matrix.mock-release }} --chroot -- ccache --show-stats 2>/dev/null || echo "ccache stats not available"
+          CCACHE_DIR=/var/cache/mock/${{ matrix.mock-release }}/ccache/u0
+          if [ -d "$CCACHE_DIR" ]; then
+            CCACHE_DIR=$CCACHE_DIR ccache --show-stats 2>/dev/null || ccache -s 2>/dev/null || echo "ccache stats not available"
+          else
+            echo "ccache directory not found at $CCACHE_DIR"
+          fi
           
           echo "=== Mock ccache directory size ==="
           du -sh /var/cache/mock/${{ matrix.mock-release }}/ccache/ 2>/dev/null || echo "ccache dir not found"
-          ls -la /var/cache/mock/${{ matrix.mock-release }}/ccache/ 2>/dev/null | head -10 || true
+          
+          echo "=== Cache contents ==="
+          find /var/cache/mock/${{ matrix.mock-release }}/ccache/ -type f 2>/dev/null | wc -l | xargs -I {} echo "Total cached files: {}"
 
       - name: Cleanup mock
         if: always()
@@ -502,33 +509,31 @@ jobs:
           echo "=== Installed Flux packages ==="
           rpm -qa | grep -E '^(flux|python3-flux)' | sort
 
-      - name: Setup MUNGE
+      - name: Setup test environment (MUNGE + test user)
         run: |
-          # Install munge if not present
-          dnf install -y munge munge-libs
+          # Install required packages: munge, sudo, util-linux 
+          dnf install -y munge munge-libs sudo util-linux-core
           
           # Create munge key
           dd if=/dev/urandom bs=1 count=1024 > /etc/munge/munge.key 2>/dev/null
-          chown munge:munge /etc/munge/munge.key
+          chown -R munge:munge /etc/munge/munge.key
           chmod 600 /etc/munge/munge.key
           
-          # Setup munge directories
-          mkdir -p /var/run/munge
-          chown munge:munge /var/run/munge
-          chmod 755 /var/run/munge
+          # Setup munge run directory
+          mkdir -p /run/munge
+          chown munge:munge /run/munge
+          chmod 755 /run/munge
           
-          # Start munge daemon
-          runuser -u munge -- /usr/sbin/munged
+          # Start munge daemon (use su since runuser may not be available on all distros)
+          su -s /bin/sh munge -c /usr/sbin/munged || /usr/sbin/munged --force
           
           echo "=== MUNGE setup complete ==="
-
-      - name: Create non-root test user
-        run: |
+          
           # Create fluxuser for running tests (flux prefers non-root)
           groupadd -g 1000 fluxuser 2>/dev/null || true
           useradd -u 1000 -g fluxuser -m -s /bin/bash fluxuser 2>/dev/null || true
           
-          # Give fluxuser sudo access for any needed commands
+          # Give fluxuser sudo access
           echo "fluxuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
           
           echo "=== Test user 'fluxuser' created ==="
@@ -536,10 +541,10 @@ jobs:
       - name: Setup flux environment
         run: |
           echo "=== Setting up flux environment ==="
-          runuser -u fluxuser -- bash -c 'eval $(flux env) && echo "FLUX_EXEC_PATH=$FLUX_EXEC_PATH"'
+          su fluxuser -c 'eval $(flux env) && echo "FLUX_EXEC_PATH=$FLUX_EXEC_PATH"'
           
           echo "=== Verifying FLUX_EXEC_PATH contents ==="
-          runuser -u fluxuser -- bash -c '
+          su fluxuser -c '
             eval $(flux env)
             for dir in $(echo $FLUX_EXEC_PATH | tr ":" " "); do
               if [ -d "$dir" ]; then
@@ -550,7 +555,7 @@ jobs:
 
       - name: Verify flux-core CLI (standalone)
         run: |
-          runuser -u fluxuser -- bash -c '
+          su fluxuser -c '
             eval $(flux env)
             echo "=== flux --version ==="
             flux --version
@@ -561,7 +566,7 @@ jobs:
 
       - name: Verify Python bindings
         run: |
-          runuser -u fluxuser -- bash -c '
+          su fluxuser -c '
             eval $(flux env)
             echo "=== Testing flux Python module import ==="
             python3 -c "import flux; print(\"flux module imported successfully\")"
@@ -571,7 +576,7 @@ jobs:
 
       - name: Verify flux instance basic functionality
         run: |
-          runuser -u fluxuser -- bash -c '
+          su fluxuser -c '
             eval $(flux env)
             echo "=== Basic instance startup (test mode) ==="
             timeout 30 flux start --test-size=1 echo "Hello from flux!"
@@ -587,7 +592,7 @@ jobs:
 
       - name: Test job submission and execution
         run: |
-          runuser -u fluxuser -- bash -c '
+          su fluxuser -c '
             eval $(flux env)
             echo "=== Submit and run a simple job ==="
             timeout 120 flux start --test-size=1 sh -c "
@@ -610,7 +615,7 @@ jobs:
 
       - name: Test resource and queue commands
         run: |
-          runuser -u fluxuser -- bash -c '
+          su fluxuser -c '
             eval $(flux env)
             echo "=== Resource and queue status ==="
             timeout 60 flux start --test-size=1 sh -c "
@@ -623,7 +628,7 @@ jobs:
 
       - name: Test KVS operations
         run: |
-          runuser -u fluxuser -- bash -c '
+          su fluxuser -c '
             eval $(flux env)
             echo "=== KVS read/write ==="
             timeout 60 flux start --test-size=1 sh -c "
@@ -636,7 +641,7 @@ jobs:
 
       - name: Test event system
         run: |
-          runuser -u fluxuser -- bash -c '
+          su fluxuser -c '
             eval $(flux env)
             echo "=== Event pub/sub ==="
             timeout 60 flux start --test-size=1 sh -c "
@@ -652,7 +657,7 @@ jobs:
       - name: Verify flux-sched scheduling
         run: |
           if rpm -q flux-sched &>/dev/null; then
-            runuser -u fluxuser -- bash -c '
+            su fluxuser -c '
               eval $(flux env)
               echo "=== Testing flux-sched ==="
               timeout 120 flux start --test-size=1 sh -c "
@@ -674,7 +679,7 @@ jobs:
       - name: Verify flux-accounting plugin
         run: |
           if rpm -q flux-accounting &>/dev/null; then
-            runuser -u fluxuser -- bash -c '
+            su fluxuser -c '
               eval $(flux env)
               echo "=== flux-accounting verification ==="
               # Verify plugin files exist
