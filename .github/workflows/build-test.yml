@@ -509,53 +509,45 @@ jobs:
           echo "=== Installed Flux packages ==="
           rpm -qa | grep -E '^(flux|python3-flux)' | sort
 
-      - name: Setup test environment (MUNGE + test user)
+      - name: Setup test environment
         run: |
-          # Install required packages: munge, sudo, util-linux 
-          dnf install -y munge munge-libs sudo util-linux-core
+          # Install util-linux (provides runuser), munge for security
+          dnf install -y util-linux munge munge-libs
           
-          # Create munge key
+          # Setup MUNGE
           dd if=/dev/urandom bs=1 count=1024 > /etc/munge/munge.key 2>/dev/null
           chown -R munge:munge /etc/munge/munge.key
           chmod 600 /etc/munge/munge.key
-          
-          # Setup munge run directory
           mkdir -p /run/munge
           chown munge:munge /run/munge
           chmod 755 /run/munge
+          runuser -u munge -- /usr/sbin/munged
+          echo "=== MUNGE started ==="
           
-          # Start munge daemon (use su since runuser may not be available on all distros)
-          su -s /bin/sh munge -c /usr/sbin/munged || /usr/sbin/munged --force
-          
-          echo "=== MUNGE setup complete ==="
-          
-          # Create fluxuser for running tests (flux prefers non-root)
+          # Create test user (flux prefers non-root)
           groupadd -g 1000 fluxuser 2>/dev/null || true
           useradd -u 1000 -g fluxuser -m -s /bin/bash fluxuser 2>/dev/null || true
-          
-          # Give fluxuser sudo access
-          echo "fluxuser ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
-          
-          echo "=== Test user 'fluxuser' created ==="
+          echo "=== Test user created ==="
 
       - name: Setup flux environment
         run: |
-          echo "=== Setting up flux environment ==="
-          su fluxuser -c 'eval $(flux env) && echo "FLUX_EXEC_PATH=$FLUX_EXEC_PATH"'
-          
-          echo "=== Verifying FLUX_EXEC_PATH contents ==="
-          su fluxuser -c '
+          runuser -u fluxuser -- bash -c '
             eval $(flux env)
+            echo "=== Flux environment ==="
+            echo "FLUX_EXEC_PATH=$FLUX_EXEC_PATH"
+            echo "PYTHONPATH=$PYTHONPATH"
+            
+            echo "=== Verifying FLUX_EXEC_PATH contents ==="
             for dir in $(echo $FLUX_EXEC_PATH | tr ":" " "); do
               if [ -d "$dir" ]; then
-                echo "  $dir: $(ls $dir 2>/dev/null | wc -l) files"
+                echo "  $dir: $(ls "$dir" 2>/dev/null | wc -l) files"
               fi
             done
           '
 
       - name: Verify flux-core CLI (standalone)
         run: |
-          su fluxuser -c '
+          runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== flux --version ==="
             flux --version
@@ -566,7 +558,7 @@ jobs:
 
       - name: Verify Python bindings
         run: |
-          su fluxuser -c '
+          runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Testing flux Python module import ==="
             python3 -c "import flux; print(\"flux module imported successfully\")"
@@ -576,7 +568,7 @@ jobs:
 
       - name: Verify flux instance basic functionality
         run: |
-          su fluxuser -c '
+          runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Basic instance startup (test mode) ==="
             timeout 30 flux start --test-size=1 echo "Hello from flux!"
@@ -592,21 +584,14 @@ jobs:
 
       - name: Test job submission and execution
         run: |
-          su fluxuser -c '
+          runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Submit and run a simple job ==="
             timeout 120 flux start --test-size=1 sh -c "
-              # Submit a job and wait for it
               JOBID=\$(flux submit --wait hostname)
               echo \"Job \$JOBID completed\"
-              
-              # Check job status
               flux jobs -a
-              
-              # Run interactively
               flux run echo \"Interactive job completed\"
-              
-              # Submit multiple jobs
               flux submit --cc=1-3 sleep 0.1
               flux queue drain
               echo \"Bulk jobs completed\"
@@ -615,7 +600,7 @@ jobs:
 
       - name: Test resource and queue commands
         run: |
-          su fluxuser -c '
+          runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Resource and queue status ==="
             timeout 60 flux start --test-size=1 sh -c "
@@ -628,7 +613,7 @@ jobs:
 
       - name: Test KVS operations
         run: |
-          su fluxuser -c '
+          runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== KVS read/write ==="
             timeout 60 flux start --test-size=1 sh -c "
@@ -641,11 +626,10 @@ jobs:
 
       - name: Test event system
         run: |
-          su fluxuser -c '
+          runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Event pub/sub ==="
             timeout 60 flux start --test-size=1 sh -c "
-              # Subscribe and publish in background
               flux event sub --count=1 test.event &
               sleep 0.5
               flux event pub test.event
@@ -657,17 +641,14 @@ jobs:
       - name: Verify flux-sched scheduling
         run: |
           if rpm -q flux-sched &>/dev/null; then
-            su fluxuser -c '
+            runuser -u fluxuser -- bash -c '
               eval $(flux env)
               echo "=== Testing flux-sched ==="
               timeout 120 flux start --test-size=1 sh -c "
-                # Verify sched modules are loaded
                 flux module list | grep sched || echo \"Loading sched modules...\"
                 flux module load sched-fluxion-resource 2>/dev/null || true
                 flux module load sched-fluxion-qmanager 2>/dev/null || true
                 flux module list | grep sched
-                
-                # Submit a job
                 flux run hostname
                 echo \"Fluxion scheduler working\"
               "
@@ -679,14 +660,11 @@ jobs:
       - name: Verify flux-accounting plugin
         run: |
           if rpm -q flux-accounting &>/dev/null; then
-            su fluxuser -c '
+            runuser -u fluxuser -- bash -c '
               eval $(flux env)
               echo "=== flux-accounting verification ==="
-              # Verify plugin files exist
               ls -la /usr/lib64/flux/modules/*account* 2>/dev/null || true
               ls -la /usr/libexec/flux/cmd/flux-account* 2>/dev/null || true
-              
-              # Basic command check
               flux account --help || echo "flux account help displayed"
               echo "flux-accounting package verified"
             '
