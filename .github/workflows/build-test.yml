@@ -525,7 +525,6 @@ jobs:
           echo "=== MUNGE started ==="
           
           # Create test user (flux prefers non-root)
-          # Don't force specific UID/GID - they may already be in use (e.g., rawhide)
           if ! id fluxuser &>/dev/null; then
             groupadd fluxuser || true
             useradd -g fluxuser -m -s /bin/bash fluxuser
@@ -712,11 +711,14 @@ jobs:
               eval $(flux env)
               echo "=== Testing flux-sched ==="
               timeout 120 flux start --test-size=1 sh -c "
+                echo \"Checking scheduler modules...\"
                 flux module list | grep sched || echo \"Loading sched modules...\"
                 flux module load sched-fluxion-resource 2>/dev/null || true
                 flux module load sched-fluxion-qmanager 2>/dev/null || true
                 flux module list | grep sched
-                flux run hostname
+                echo \"Running job with Fluxion scheduler...\"
+                flux run echo \"Hello from Fluxion scheduled job\"
+                flux submit --wait echo \"Submitted job completed\"
                 echo \"Fluxion scheduler working\"
               "
             '
@@ -730,10 +732,16 @@ jobs:
             runuser -u fluxuser -- bash -c '
               eval $(flux env)
               echo "=== flux-accounting verification ==="
-              ls -la /usr/lib64/flux/modules/*account* 2>/dev/null || true
-              ls -la /usr/libexec/flux/cmd/flux-account* 2>/dev/null || true
-              flux account --help || echo "flux account help displayed"
-              echo "flux-accounting package verified"
+              
+              echo "Checking installed files..."
+              ls -la /usr/lib64/flux/job-manager/plugins/mf_priority.so
+              ls -la /usr/libexec/flux/cmd/flux-account*.py | head -5
+              
+              echo "Testing flux account command..."
+              flux account --help
+              flux account-priority-update --help
+              
+              echo "flux-accounting commands verified"
             '
           else
             echo "flux-accounting not installed, skipping"
