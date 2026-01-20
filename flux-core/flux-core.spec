@@ -138,6 +138,11 @@ find %{buildroot} \
 # do not package .la files
 find %{buildroot} -name '*.la' -delete
 
+# Fix Python subcommand permissions - flux requires .py files to be executable
+# (checked via access(path, R_OK|X_OK) in exec_subcommand_py)
+find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
+find %{buildroot}%{_libexecdir}/flux/modprobe -name '*.py' -exec chmod 755 {} \;
+
 # Create directories owned by package
 mkdir -p -m 0755 %{buildroot}%{_sysconfdir}/flux/rc3.d
 mkdir -p -m 0755 %{buildroot}%{_sysconfdir}/flux/rc1.d
