@@ -1,6 +1,6 @@
 Name:    flux-core
 Version: 0.81.0
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
@@ -64,6 +64,7 @@ Requires: python3
 Requires: python3-cffi
 Requires: python3-pyyaml
 Requires: python3-ply
+Requires: python3-flux%{?_isa} = %{version}-%{release}
 
 BuildRequires: python3
 BuildRequires: python3-devel
@@ -287,6 +288,9 @@ fi
 %{_libdir}/flux/python*
 
 %changelog
+* Mon Feb 9 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.81.0-3
+- Add python3-flux sub-package to Requires for main flux-core package
+
 * Wed Jan 15 2026 Kush Gupta <kugupta@redhat.com> - 0.81.0-2
 - Add const-correctness patch for C23 compatibility (fixes #7262)
 - Backport from upstream PR #7263
