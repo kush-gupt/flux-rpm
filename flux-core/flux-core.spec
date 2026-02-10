@@ -64,7 +64,6 @@ Requires: python3
 Requires: python3-cffi
 Requires: python3-pyyaml
 Requires: python3-ply
-Requires: python3-flux%{?_isa} = %{version}-%{release}
 
 BuildRequires: python3
 BuildRequires: python3-devel
@@ -102,16 +101,6 @@ Requires: %{name}%{?_isa} = %{version}-%{release}
 
 %description devel
 Development files for %{name}.
-
-%package -n python3-flux
-Summary: Python 3 bindings for flux-core
-Requires: %{name}%{?_isa} = %{version}-%{release}
-Requires: python3-cffi
-Requires: python3-pyyaml
-Requires: python3-ply
-
-%description -n python3-flux
-Python 3 bindings for flux-core resource manager framework.
 
 %prep
 %autosetup -n %{name}-%{version} -p1
@@ -268,6 +257,11 @@ fi
 %{_sysconfdir}/flux/shell/lua.d/*.lua
 %{_sysconfdir}/flux/shell/lua.d/mpi/*.lua
 
+# python bindings
+%{python3_sitearch}/flux
+%{python3_sitearch}/_flux
+%{_libdir}/flux/python*
+
 %files devel
 # devel
 %{_libdir}/pkgconfig/%{name}.pc
@@ -281,15 +275,9 @@ fi
 %{_includedir}/flux
 %{_mandir}/man3/*.3*
 
-%files -n python3-flux
-# python binding
-%{python3_sitearch}/flux
-%{python3_sitearch}/_flux
-%{_libdir}/flux/python*
-
 %changelog
-* Mon Feb 9 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.81.0-3
-- Add python3-flux sub-package to Requires for main flux-core package
+* Tue Feb 10 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.81.0-3
+- Remove python3-flux sub-package; main flux-core package needs bindings
 
 * Wed Jan 15 2026 Kush Gupta <kugupta@redhat.com> - 0.81.0-2
 - Add const-correctness patch for C23 compatibility (fixes #7262)
