@@ -30,7 +30,7 @@ runs:
         mock -r ${{ inputs.mock-release }} --install $SECURITY_RPMS
 
         echo "=== Installing flux-core packages ==="
-        CORE_RPMS=$(ls ${{ inputs.core-results }}/flux-core*.x86_64.rpm ${{ inputs.core-results }}/python3-flux*.x86_64.rpm 2>/dev/null | grep -v debuginfo | grep -v debugsource)
+        CORE_RPMS=$(ls ${{ inputs.core-results }}/flux-core*.x86_64.rpm 2>/dev/null | grep -v debuginfo | grep -v debugsource)
         echo "Installing: $CORE_RPMS"
         mock -r ${{ inputs.mock-release }} --install $CORE_RPMS
 
@@ -87,7 +87,6 @@ runs:
           echo "--- Package info ---"
           rpm -qi flux-core
           rpm -qi flux-core-devel
-          rpm -qi python3-flux
 
           echo ""
           echo "--- Binary verification ---"

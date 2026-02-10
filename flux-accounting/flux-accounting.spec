@@ -41,7 +41,6 @@ BuildRequires: systemd-rpm-macros
 BuildRequires: glibc-langpack-en
 
 Requires: flux-core
-Requires: python3-flux
 Requires: sqlite >= 3.6.0
 Requires: python3
 Requires: python3-cffi

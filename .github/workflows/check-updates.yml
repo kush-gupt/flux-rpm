@@ -523,7 +523,7 @@ jobs:
             - Full GitHub Source URL
             - Removed deprecated tags (BuildRoot, Group, %defattr, %clean)
             - Modern ldconfig scriptlets
-            - Removed versioned Python subpackages (use `python3-flux`)
+            - Python bindings included in main `flux-core` package
             - Removed LLNL-specific patches and conditionals
             - Modern build macros (`%make_build`, `%make_install`)
             - Corrected `flux-security-devel` dependency

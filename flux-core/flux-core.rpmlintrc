@@ -9,6 +9,3 @@ addFilter("cross-directory-hard-link")
 
 # flux-python is a wrapper script, manpage is not essential
 addFilter("no-manual-page-for-binary flux-python")
-
-# python3-flux subpackage documentation is in main package
-addFilter("no-documentation.*python3-flux")
