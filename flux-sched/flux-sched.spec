@@ -1,6 +1,6 @@
 Name:    flux-sched
-Version: 0.48.0
-Release: 2%{?dist}
+Version: 0.49.0
+Release: 1%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-sched
@@ -9,6 +9,9 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 # Work around GCC 15 internal compiler error (ICE) in scope_guard.hpp
 # GCC bug: https://gcc.gnu.org/bugzilla/
 Patch0:  gcc15-ice-workaround.patch
+# Fix CMake install LIBDIR on Fedora Rawhide (CMake 4.0+)
+# GNUInstallDirs sets normal variable that shadows the CACHE FORCE override
+Patch1:  cmake-install-libdir-fix.patch
 
 # Redhat only provides /usr/bin/false, but tests look for /bin/false
 %global __requires_exclude /bin/false
@@ -154,10 +157,14 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
-* Wed Jan 15 2026 Kush Gupta <kush-gupt@users.noreply.github.com> - 0.48.0-2
+* Wed Feb 11 2026 Kush Gupta <kugupta@redhat.com> - 0.49.0-1
+- Update to v0.49.0
+- Add patch to fix CMake install LIBDIR on Fedora Rawhide (CMake 4.0+)
+
+* Thu Jan 15 2026 Kush Gupta <kush-gupt@users.noreply.github.com> - 0.48.0-2
 - Add patch to work around GCC 15 internal compiler error in scope_guard.hpp
 
-* Wed Jan 7 2026 Kush Gupta <kush-gupt@users.noreply.github.com> - 0.48.0-1
+* Tue Jan 7 2026 Kush Gupta <kush-gupt@users.noreply.github.com> - 0.48.0-1
 - Update to flux-sched v0.48.0
 - Add gcc-toolset-13 for EL9 builds (requires GCC 12+)
 - Adapt spec for Fedora packaging

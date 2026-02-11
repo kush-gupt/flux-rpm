@@ -1,11 +1,10 @@
 Name:    flux-core
-Version: 0.81.0
-Release: 3%{?dist}
+Version: 0.82.0
+Release: 1%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
-Patch0: const-correctness.patch
 
 # Redhat only provides /usr/bin/false, but tests look for /bin/false
 %global __requires_exclude /bin/false
@@ -278,10 +277,14 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Wed Feb 11 2026 Kush Gupta <kugupta@redhat.com> - 0.82.0-1
+- Update to v0.82.0
+- Drop const-correctness patch (merged upstream)
+
 * Tue Feb 10 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.81.0-3
 - Remove python3-flux sub-package; main flux-core package needs bindings
 
-* Wed Jan 15 2026 Kush Gupta <kugupta@redhat.com> - 0.81.0-2
+* Thu Jan 15 2026 Kush Gupta <kugupta@redhat.com> - 0.81.0-2
 - Add const-correctness patch for C23 compatibility (fixes #7262)
 - Backport from upstream PR #7263
 
