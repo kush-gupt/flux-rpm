@@ -281,7 +281,6 @@ jobs:
           EOF
 
       - name: Create tracking issue
-        id: create-issue
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: "Update flux-security to ${{ needs.check-flux-security.outputs.new_version }}"
@@ -299,8 +298,6 @@ jobs:
             Automated version bump for flux-security from ${{ needs.check-flux-security.outputs.current_version }} to ${{ needs.check-flux-security.outputs.new_version }}.
 
             Release: https://github.com/flux-framework/flux-security/releases/tag/v${{ needs.check-flux-security.outputs.new_version }}
-
-            Closes #${{ steps.create-issue.outputs.issue-number }}
 
             Please review:
             - [ ] Check release notes for spec file changes
@@ -344,7 +341,6 @@ jobs:
           EOF
 
       - name: Create tracking issue
-        id: create-issue
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: "Update flux-core to ${{ needs.check-flux-core.outputs.new_version }}"
@@ -362,8 +358,6 @@ jobs:
             Automated version bump for flux-core from ${{ needs.check-flux-core.outputs.current_version }} to ${{ needs.check-flux-core.outputs.new_version }}.
 
             Release: https://github.com/flux-framework/flux-core/releases/tag/v${{ needs.check-flux-core.outputs.new_version }}
-
-            Closes #${{ steps.create-issue.outputs.issue-number }}
 
             Please review:
             - [ ] Check release notes for spec file changes
@@ -407,7 +401,6 @@ jobs:
           EOF
 
       - name: Create tracking issue
-        id: create-issue
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: "Update flux-sched to ${{ needs.check-flux-sched.outputs.new_version }}"
@@ -425,8 +418,6 @@ jobs:
             Automated version bump for flux-sched from ${{ needs.check-flux-sched.outputs.current_version }} to ${{ needs.check-flux-sched.outputs.new_version }}.
 
             Release: https://github.com/flux-framework/flux-sched/releases/tag/v${{ needs.check-flux-sched.outputs.new_version }}
-
-            Closes #${{ steps.create-issue.outputs.issue-number }}
 
             Please review:
             - [ ] Check release notes for spec file changes
@@ -470,7 +461,6 @@ jobs:
           EOF
 
       - name: Create tracking issue
-        id: create-issue
         uses: peter-evans/create-issue-from-file@v5
         with:
           title: "Update flux-accounting to ${{ needs.check-flux-accounting.outputs.new_version }}"
@@ -488,8 +478,6 @@ jobs:
             Automated version bump for flux-accounting from ${{ needs.check-flux-accounting.outputs.current_version }} to ${{ needs.check-flux-accounting.outputs.new_version }}.
 
             Release: https://github.com/flux-framework/flux-accounting/releases/tag/v${{ needs.check-flux-accounting.outputs.new_version }}
-
-            Closes #${{ steps.create-issue.outputs.issue-number }}
 
             Please review:
             - [ ] Check release notes for spec file changes
