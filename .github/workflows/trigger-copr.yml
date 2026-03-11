@@ -78,7 +78,7 @@ jobs:
           FAILED=0
           for pkg in ${{ steps.detect.outputs.packages }}; do
             echo "::group::Triggering $pkg"
-            if copr-cli build-package --name "$pkg" "kushgupta/$pkg"; then
+            if copr-cli build-package --nowait --name "$pkg" "kushgupta/$pkg"; then
               echo "Triggered $pkg build successfully"
             else
               echo "::warning::Failed to trigger $pkg build"
