@@ -1,5 +1,5 @@
 Name:    flux-accounting
-Version: 0.55.0
+Version: 0.56.0
 Release: 1%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
@@ -134,5 +134,9 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man1/*.1*
 
 %changelog
+* Wed Mar 11 2026 Kush Gupta <kugupta@redhat.com> - 0.56.0-1
+- Update to v0.56.0
+- New clear-usage command, decay factor fix, minor plugin improvements
+
 * Sun Jan 11 2026 Kushal Gupta <kugupta@redhat.com> - 0.55.0-1
 - Initial Fedora package based on upstream v0.55.0

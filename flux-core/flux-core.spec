@@ -1,5 +1,5 @@
 Name:    flux-core
-Version: 0.82.0
+Version: 0.83.1
 Release: 1%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
@@ -277,6 +277,10 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Wed Mar 11 2026 Kush Gupta <kugupta@redhat.com> - 0.83.1-1
+- Update to v0.83.1
+- NO_COLOR support, Python userid/rolemask getters, module loader helpers
+
 * Wed Feb 11 2026 Kush Gupta <kugupta@redhat.com> - 0.82.0-1
 - Update to v0.82.0
 - Drop const-correctness patch (merged upstream)
