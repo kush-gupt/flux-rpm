@@ -61,10 +61,10 @@ jobs:
             if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
               echo "No parent commit available; rebuilding all packages"
               PKGS="$ALL_PKGS"
-            elif git diff --name-only HEAD~1 HEAD -- '.copr/' | grep -q .; then
+            elif git diff --name-only HEAD~1 HEAD -- '.copr' | grep -q .; then
               PKGS="$ALL_PKGS"
             else
-              PKGS=$(git diff --name-only HEAD~1 HEAD -- 'flux-*/' | \
+              PKGS=$(git diff --name-only HEAD~1 HEAD -- 'flux-*' | \
                 grep -oP '^flux-[^/]+' | sort -u | tr '\n' ' ')
             fi
           fi
