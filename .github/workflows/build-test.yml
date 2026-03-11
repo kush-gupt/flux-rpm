@@ -5,6 +5,15 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    paths:
+      - 'flux-*/*.spec'
+      - 'flux-*/sources'
+      - 'flux-*/*.patch'
+      - '.copr/**'
+      - '.github/workflows/build-test.yml'
+      - '.github/workflows/reusable-mock-build.yml'
+      - '.github/actions/**'
+      - '.github/containers/**'
   workflow_dispatch:
 
 # Cancel in-progress runs when a new run is triggered
