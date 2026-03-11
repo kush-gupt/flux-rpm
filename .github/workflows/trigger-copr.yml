@@ -24,6 +24,13 @@ jobs:
         with:
           fetch-depth: 2
 
+      - name: Validate COPR secrets
+        run: |
+          if [ -z "${{ secrets.COPR_LOGIN }}" ] || [ -z "${{ secrets.COPR_TOKEN }}" ]; then
+            echo "::error::COPR_LOGIN and COPR_TOKEN secrets must be configured. See https://copr.fedorainfracloud.org/api/"
+            exit 1
+          fi
+
       - name: Install copr-cli
         run: pip install copr-cli
 
@@ -41,22 +48,29 @@ jobs:
       - name: Detect changed packages
         id: detect
         run: |
+          ALL_PKGS="flux-security flux-core flux-sched flux-accounting"
+
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             INPUT="${{ github.event.inputs.packages }}"
             if [ "$INPUT" = "all" ] || [ -z "$INPUT" ]; then
-              echo "packages=flux-security flux-core flux-sched flux-accounting" >> "$GITHUB_OUTPUT"
+              PKGS="$ALL_PKGS"
             else
-              echo "packages=$INPUT" >> "$GITHUB_OUTPUT"
+              PKGS="$INPUT"
             fi
           else
-            CHANGED=$(git diff --name-only HEAD~1 HEAD -- 'flux-*/' '.copr/' | \
-              grep -oP '^flux-[^/]+' | sort -u | tr '\n' ' ')
-            if git diff --name-only HEAD~1 HEAD -- '.copr/' | grep -q .; then
-              CHANGED="flux-security flux-core flux-sched flux-accounting"
+            if ! git rev-parse HEAD~1 >/dev/null 2>&1; then
+              echo "No parent commit available; rebuilding all packages"
+              PKGS="$ALL_PKGS"
+            elif git diff --name-only HEAD~1 HEAD -- '.copr/' | grep -q .; then
+              PKGS="$ALL_PKGS"
+            else
+              PKGS=$(git diff --name-only HEAD~1 HEAD -- 'flux-*/' | \
+                grep -oP '^flux-[^/]+' | sort -u | tr '\n' ' ')
             fi
-            echo "packages=$CHANGED" >> "$GITHUB_OUTPUT"
           fi
-          echo "Will trigger builds for: $(cat "$GITHUB_OUTPUT" | grep packages | cut -d= -f2)"
+
+          echo "packages=$PKGS" >> "$GITHUB_OUTPUT"
+          echo "Will trigger builds for: $PKGS"
 
       - name: Trigger COPR builds
         if: steps.detect.outputs.packages != ''

@@ -211,9 +211,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - distro: fedora-41
-            mock-release: fedora-41-x86_64
-            short-name: f41
           - distro: fedora-42
             mock-release: fedora-42-x86_64
             short-name: f42
@@ -458,9 +455,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - distro: fedora-41
-            image: fedora:41
-            short-name: f41
           - distro: fedora-42
             image: fedora:42
             short-name: f42

@@ -19,7 +19,7 @@ Heavily assisted through Cursor IDE with Claude Opus, but all code is reviewed b
 
 ## Installation
 
-Available for **Fedora** 41, 42, 43, Rawhide and **EPEL** 9, 10 via COPR. Packages must be installed in dependency order:
+Available for **Fedora** 42, 43, Rawhide and **EPEL** 9, 10 via COPR. Packages must be installed in dependency order:
 
 ```
 flux-security → flux-core → flux-sched
@@ -66,7 +66,7 @@ mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-accounting-*.src.rpm
 ## CI/CD
 
 **Build targets:**
-- **Fedora**: 41, 42, Rawhide
+- **Fedora**: 42, 43, Rawhide
 - **EPEL**: 9, 10 (CentOS Stream)
 
 **Automation:**
