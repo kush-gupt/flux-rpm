@@ -200,7 +200,7 @@ jobs:
           # Move to workspace for upload
           mkdir -p srpms
           mv ~/rpmbuild/SRPMS/*.src.rpm srpms/
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v6
         with:
           name: srpms
           path: srpms/
@@ -244,34 +244,16 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Download SRPMs
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: srpms
           path: ./srpms
 
-      - name: Restore mock cache
-        uses: actions/cache@v5
-        with:
-          path: /var/cache/mock
-          key: mock-${{ matrix.mock-release }}-${{ hashFiles('flux-*/*.spec') }}
-          restore-keys: |
-            mock-${{ matrix.mock-release }}-
-
       - name: List SRPMs
         run: ls -la ./srpms/
 
-      - name: Initialize mock with ccache
-        run: |
-          # Initialize mock with ccache plugin enabled
-          # Mock's ccache plugin stores data at /var/cache/mock/<chroot>/ccache/
-          # which is included in our mock cache restore above
-          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --init
-          
-          echo "=== Mock ccache location ==="
-          ls -la /var/cache/mock/${{ matrix.mock-release }}/ccache/ 2>/dev/null || echo "ccache dir not yet created"
-          
-          echo "=== Checking ccache stats after init ==="
-          mock -r ${{ matrix.mock-release }} --chroot -- ccache --show-stats 2>/dev/null || true
+      - name: Initialize mock
+        run: mock -r ${{ matrix.mock-release }} --init
 
       # ============================================================
       # Build flux-security
@@ -279,7 +261,7 @@ jobs:
       - name: Build flux-security
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --no-clean --no-cleanup-after --rebuild srpms/flux-security-*.src.rpm --resultdir=results-security 2>&1 | tee security-build.log
+          mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --rebuild srpms/flux-security-*.src.rpm --resultdir=results-security 2>&1 | tee security-build.log
 
       - name: Install flux-security in mock
         run: |
@@ -295,7 +277,7 @@ jobs:
       - name: Build flux-core
         run: |
           set -o pipefail
-          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --no-clean --no-cleanup-after --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
+          mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
 
       - name: Install flux-core in mock
         run: |
@@ -312,56 +294,32 @@ jobs:
       # Prepare a separate chroot for flux-accounting (needed to avoid mock lock contention)
       - name: Prepare parallel build chroot for flux-accounting
         run: |
-          echo "=== Initializing separate chroot for flux-accounting ==="
-          # Initialize a separate chroot with ccache
-          mock -r ${{ matrix.mock-release }} --uniqueext=accounting --enable-plugin=ccache --init
+          mock -r ${{ matrix.mock-release }} --uniqueext=accounting --init
           
-          # Install flux-security and flux-core into the accounting chroot
           SECURITY_RPM=$(ls results-security/flux-security-[0-9]*.x86_64.rpm | head -1)
           SECURITY_DEVEL_RPM=$(ls results-security/flux-security-devel-*.x86_64.rpm | head -1)
           CORE_RPM=$(ls results-core/flux-core-[0-9]*.x86_64.rpm | head -1)
           CORE_DEVEL_RPM=$(ls results-core/flux-core-devel-*.x86_64.rpm | head -1)
           
-          echo "Installing dependencies into accounting chroot:"
-          echo "  $SECURITY_RPM $SECURITY_DEVEL_RPM"
-          echo "  $CORE_RPM $CORE_DEVEL_RPM"
-          
           mock -r ${{ matrix.mock-release }} --uniqueext=accounting \
             --no-clean --no-cleanup-after \
             --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM" "$CORE_RPM" "$CORE_DEVEL_RPM"
-          
-          # Copy ccache data to the accounting chroot
-          CCACHE_SRC="/var/lib/mock/${{ matrix.mock-release }}/root/root/.ccache"
-          CCACHE_DST="/var/lib/mock/${{ matrix.mock-release }}-accounting/root/root/.ccache"
-          if [ -d "$CCACHE_SRC" ]; then
-            mkdir -p "$CCACHE_DST"
-            cp -r "$CCACHE_SRC"/* "$CCACHE_DST"/ 2>/dev/null || true
-            echo "Copied ccache to accounting chroot"
-          fi
 
       - name: Build flux-sched and flux-accounting (parallel)
         run: |
           set -o pipefail
           
-          # Build flux-sched in the main chroot (background)
-          echo "=== Starting flux-sched build (background) ==="
-          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache \
+          mock -r ${{ matrix.mock-release }} \
             --no-clean --no-cleanup-after \
             --rebuild srpms/flux-sched-*.src.rpm \
             --resultdir=results-sched 2>&1 | tee sched-build.log &
           SCHED_PID=$!
           
-          # Build flux-accounting in the separate chroot (background)
-          echo "=== Starting flux-accounting build (background) ==="
-          mock -r ${{ matrix.mock-release }} --uniqueext=accounting --enable-plugin=ccache \
+          mock -r ${{ matrix.mock-release }} --uniqueext=accounting \
             --no-clean --no-cleanup-after \
             --rebuild srpms/flux-accounting-*.src.rpm \
             --resultdir=results-accounting 2>&1 | tee accounting-build.log &
           ACCT_PID=$!
-          
-          echo "=== Waiting for parallel builds to complete ==="
-          echo "flux-sched PID: $SCHED_PID"
-          echo "flux-accounting PID: $ACCT_PID"
           
           # Wait for both builds and capture exit codes
           SCHED_EXIT=0
@@ -394,9 +352,6 @@ jobs:
           echo "=== Build Summary for ${{ matrix.mock-release }} ===" | tee build-summary.txt
           echo "Build completed: $(date)" >> build-summary.txt
           echo "" >> build-summary.txt
-          echo "=== ccache stats ===" >> build-summary.txt
-          mock -r ${{ matrix.mock-release }} --enable-plugin=ccache --chroot -- ccache --show-stats 2>/dev/null >> build-summary.txt || echo "ccache stats not available" >> build-summary.txt
-          echo "" >> build-summary.txt
           echo "=== flux-security packages ===" >> build-summary.txt
           ls -la results-security/*.rpm 2>/dev/null | grep -v debuginfo >> build-summary.txt || echo "No packages" >> build-summary.txt
           echo "" >> build-summary.txt
@@ -410,7 +365,7 @@ jobs:
           ls -la results-accounting/*.rpm 2>/dev/null | grep -v debuginfo >> build-summary.txt || echo "No packages" >> build-summary.txt
 
       - name: Upload all build results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: rpms-${{ matrix.short-name }}
@@ -421,26 +376,6 @@ jobs:
             results-accounting/
             *-build.log
             build-summary.txt
-
-      # Show final ccache stats before cleanup
-      # Mock's ccache plugin stores data at /var/cache/mock/<chroot>/ccache/
-      # which is automatically saved by our mock cache step above
-      - name: Show final ccache stats
-        if: always()
-        run: |
-          echo "=== Final ccache statistics ==="
-          CCACHE_DIR=/var/cache/mock/${{ matrix.mock-release }}/ccache/u0
-          if [ -d "$CCACHE_DIR" ]; then
-            CCACHE_DIR=$CCACHE_DIR ccache --show-stats 2>/dev/null || ccache -s 2>/dev/null || echo "ccache stats not available"
-          else
-            echo "ccache directory not found at $CCACHE_DIR"
-          fi
-          
-          echo "=== Mock ccache directory size ==="
-          du -sh /var/cache/mock/${{ matrix.mock-release }}/ccache/ 2>/dev/null || echo "ccache dir not found"
-          
-          echo "=== Cache contents ==="
-          find /var/cache/mock/${{ matrix.mock-release }}/ccache/ -type f 2>/dev/null | wc -l | xargs -I {} echo "Total cached files: {}"
 
       - name: Cleanup mock
         if: always()
@@ -485,7 +420,7 @@ jobs:
 
     steps:
       - name: Download RPMs
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v6
         with:
           name: rpms-${{ matrix.short-name }}
           path: ./rpms
@@ -699,7 +634,7 @@ jobs:
           echo "All smoke tests passed!" >> smoke-test-summary.txt
 
       - name: Upload smoke test results
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         if: always()
         with:
           name: smoke-test-${{ matrix.short-name }}
