@@ -26,7 +26,7 @@ jobs:
       new_version: ${{ steps.check.outputs.new_version }}
       current_version: ${{ steps.check.outputs.current_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Get current version
         id: current
@@ -82,7 +82,7 @@ jobs:
       new_version: ${{ steps.check.outputs.new_version }}
       current_version: ${{ steps.check.outputs.current_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Get current version
         id: current
@@ -138,7 +138,7 @@ jobs:
       new_version: ${{ steps.check.outputs.new_version }}
       current_version: ${{ steps.check.outputs.current_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Get current version
         id: current
@@ -194,7 +194,7 @@ jobs:
       new_version: ${{ steps.check.outputs.new_version }}
       current_version: ${{ steps.check.outputs.current_version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Get current version
         id: current
@@ -254,7 +254,7 @@ jobs:
     if: needs.check-flux-security.outputs.new_version != ''
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Update spec and sources
         run: |
@@ -292,7 +292,7 @@ jobs:
           fi
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "Update flux-security to ${{ needs.check-flux-security.outputs.new_version }}"
@@ -319,7 +319,7 @@ jobs:
     if: needs.check-flux-core.outputs.new_version != ''
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Update spec and sources
         run: |
@@ -357,7 +357,7 @@ jobs:
           fi
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "Update flux-core to ${{ needs.check-flux-core.outputs.new_version }}"
@@ -384,7 +384,7 @@ jobs:
     if: needs.check-flux-sched.outputs.new_version != ''
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Update spec and sources
         run: |
@@ -422,7 +422,7 @@ jobs:
           fi
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "Update flux-sched to ${{ needs.check-flux-sched.outputs.new_version }}"
@@ -449,7 +449,7 @@ jobs:
     if: needs.check-flux-accounting.outputs.new_version != ''
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Update spec and sources
         run: |
@@ -487,7 +487,7 @@ jobs:
           fi
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           commit-message: "Update flux-accounting to ${{ needs.check-flux-accounting.outputs.new_version }}"

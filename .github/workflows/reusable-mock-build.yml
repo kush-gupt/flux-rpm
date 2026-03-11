@@ -28,10 +28,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Download SRPMs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: srpms
           path: ./srpms
@@ -78,7 +78,7 @@ jobs:
           ls -la results-core/*.rpm 2>/dev/null | grep -v debuginfo >> test-summary.txt || true
 
       - name: Upload build results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         if: always()
         with:
           name: rpms-${{ inputs.mock-release }}
