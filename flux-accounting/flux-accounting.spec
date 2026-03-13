@@ -1,6 +1,6 @@
 Name:    flux-accounting
 Version: 0.56.0
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-accounting
@@ -20,7 +20,7 @@ Patch0:  py-compile-python312.patch
 BuildRequires: pkgconfig(jansson) >= 2.10
 BuildRequires: pkgconfig(sqlite3) >= 3.6.0
 BuildRequires: pkgconfig(systemd)
-BuildRequires: python3-devel >= 3.9
+BuildRequires: python3-devel >= 3.6
 BuildRequires: python3-sphinx >= 1.6.7
 BuildRequires: python3-sphinx_rtd_theme
 BuildRequires: python3-docutils >= 0.11.0
@@ -129,6 +129,9 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man1/*.1*
 
 %changelog
+* Fri Mar 13 2026 Kush Gupta <kugupta@redhat.com> - 0.56.0-3
+- Align Python version requirement (>= 3.6) with flux-core and flux-sched
+
 * Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.56.0-2
 - Clean up requirements and dependency versions
 - Package new changelog (NEWS.md) and LICENSE files
