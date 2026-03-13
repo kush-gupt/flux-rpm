@@ -1,6 +1,6 @@
 Name:    flux-security
 Version: 0.14.0
-Release: 2%{?dist}
+Release: 3%{?dist}
 
 Summary: Flux Framework Security Components
 License: LGPL-3.0-only
@@ -13,13 +13,14 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 Patch0:  211.patch
 
 BuildRequires: pkgconfig(libsodium) >= 1.0.14
-BuildRequires: pkgconfig(jansson) >= 2.6
-BuildRequires: munge-devel
+BuildRequires: pkgconfig(jansson) >= 2.10
+BuildRequires: pkgconfig(munge)
+BuildRequires: pkgconfig(uuid)
 BuildRequires: pam-devel
-BuildRequires: libuuid-devel
-BuildRequires: python3-sphinx
+BuildRequires: python3-devel
+BuildRequires: python3-sphinx >= 1.6.7
 BuildRequires: python3-sphinx_rtd_theme
-BuildRequires: python3-docutils
+BuildRequires: python3-docutils >= 0.11.0
 BuildRequires: autoconf
 BuildRequires: automake
 BuildRequires: libtool
@@ -109,6 +110,9 @@ mkdir -p %{buildroot}%{_sysconfdir}/flux/imp/conf.d
 %{_mandir}/man3/*.3*
 
 %changelog
+* Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.14.0-3
+- Clean up requirements and dependency versions
+
 * Tue Jan  6 2026 Kush Gupta <kugupta@redhat.com> - 0.14.0-2
 - Add patch based on PR #211 to fix GCC 16 build failure on Fedora Rawhide
 - Includes fix for missing const in payload_decode_cpy (potentially incomplete in upstream PR)

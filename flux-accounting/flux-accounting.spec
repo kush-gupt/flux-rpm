@@ -1,6 +1,6 @@
 Name:    flux-accounting
 Version: 0.56.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-accounting
@@ -15,17 +15,16 @@ Patch0:  py-compile-python312.patch
 # this, brp-mangle-shebangs strips the executable bit we set, breaking `flux account`.
 %global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/
 
+%global flux_core_minver 0.81.0
+
 BuildRequires: pkgconfig(jansson) >= 2.10
-BuildRequires: pkgconfig(sqlite3)
-BuildRequires: python3
-BuildRequires: python3-devel
-BuildRequires: python3-cffi
-BuildRequires: python3-pyyaml
-BuildRequires: python3-sphinx
+BuildRequires: pkgconfig(sqlite3) >= 3.6.0
+BuildRequires: pkgconfig(systemd)
+BuildRequires: python3-devel >= 3.9
+BuildRequires: python3-sphinx >= 1.6.7
 BuildRequires: python3-sphinx_rtd_theme
-BuildRequires: python3-docutils
-BuildRequires: flux-core
-BuildRequires: flux-core-devel
+BuildRequires: python3-docutils >= 0.11.0
+BuildRequires: pkgconfig(flux-core) >= %{flux_core_minver}
 
 BuildRequires: autoconf
 BuildRequires: automake
@@ -40,11 +39,7 @@ BuildRequires: systemd-rpm-macros
 # Required for en_US.UTF-8 locale during documentation build
 BuildRequires: glibc-langpack-en
 
-Requires: flux-core
-Requires: sqlite >= 3.6.0
-Requires: python3
-Requires: python3-cffi
-Requires: python3-pyyaml
+Requires: flux-core >= %{flux_core_minver}
 
 %description
 Flux Framework is a suite of projects, tools and libraries which may
@@ -103,8 +98,8 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %systemd_postun_with_restart flux-accounting.service
 
 %files
-%license DISCLAIMER.LLNS
-%doc README.md NEWS
+%license LICENSE
+%doc README.md NEWS.md
 
 # Python fluxacct package (uses sitearch due to native extensions)
 %{python3_sitearch}/fluxacct
@@ -134,6 +129,10 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man1/*.1*
 
 %changelog
+* Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.56.0-2
+- Clean up requirements and dependency versions
+- Package new changelog (NEWS.md) and LICENSE files
+
 * Wed Mar 11 2026 Kush Gupta <kugupta@redhat.com> - 0.56.0-1
 - Update to v0.56.0
 - New clear-usage command, decay factor fix, minor plugin improvements

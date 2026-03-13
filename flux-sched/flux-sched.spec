@@ -1,6 +1,6 @@
 Name:    flux-sched
 Version: 0.49.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-sched
@@ -26,39 +26,31 @@ Patch1:  cmake-install-libdir-fix.patch
 
 ExcludeArch: ppc64le
 
-BuildRequires: flux-core-devel >= 0.75.0
-BuildRequires: cmake
+%global flux_core_minver 0.75.0
+%global boost_minver     1.66
+%global pyyaml_minver    3.10
+
+BuildRequires: pkgconfig(flux-core) >= %{flux_core_minver}
+BuildRequires: cmake >= 3.18
 BuildRequires: gcc-c++
 # flux-sched requires GCC 12+ for C++20 features
 %if 0%{?rhel} == 9
 BuildRequires: gcc-toolset-13-gcc-c++
 %endif
-BuildRequires: pkgconfig(libzmq) >= 4.1.4
-BuildRequires: pkgconfig(jansson) >= 2.6
-BuildRequires: pkgconfig(hwloc) >= 2.1
-BuildRequires: pkgconfig(libxml-2.0) >= 2.9
-BuildRequires: yaml-cpp-devel >= 0.5.1
-BuildRequires: libedit-devel
-BuildRequires: libuuid-devel
+BuildRequires: pkgconfig(jansson) >= 2.10
+BuildRequires: pkgconfig(hwloc) >= 2
+BuildRequires: pkgconfig(yaml-cpp) >= 0.5.1
+BuildRequires: pkgconfig(libedit) >= 3.0
+BuildRequires: pkgconfig(uuid)
 
-BuildRequires: boost >= 1.53.0
-BuildRequires: boost-devel
-BuildRequires: boost-graph
+BuildRequires: boost-devel >= %{boost_minver}
+BuildRequires: boost-graph >= %{boost_minver}
 
-BuildRequires: python3-pyyaml
+BuildRequires: python3-devel >= 3.6
+BuildRequires: python3-pyyaml >= %{pyyaml_minver}
 BuildRequires: python3-sphinx
 BuildRequires: python3-sphinx_rtd_theme
-BuildRequires: python3-docutils
-BuildRequires: python3-jsonschema
-
-# Should be pulled in by flux-core, but isn't
-BuildRequires: python3-cffi
-
-# Should be pulled in by flux-core
-BuildRequires: python3 >= 3.6
-
-# Required only by configure?
-BuildRequires: python3-devel
+BuildRequires: python3-jsonschema >= 2.3.0
 
 # Required for 'make check'
 BuildRequires: aspell
@@ -76,7 +68,8 @@ BuildRequires: gdb
 # Required for en_US.UTF-8 locale during build
 BuildRequires: glibc-langpack-en
 
-Requires: flux-core >= 0.75.0
+Requires: flux-core >= %{flux_core_minver}
+Requires: python3-pyyaml >= %{pyyaml_minver}
 
 %description
 flux-sched contains the Fluxion graph-based scheduler for the Flux
@@ -157,6 +150,9 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
+* Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.49.0-2
+- Clean up requirements and dependency versions
+
 * Wed Feb 11 2026 Kush Gupta <kugupta@redhat.com> - 0.49.0-1
 - Update to v0.49.0
 - Add patch to fix CMake install LIBDIR on Fedora Rawhide (CMake 4.0+)

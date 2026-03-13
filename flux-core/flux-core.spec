@@ -1,6 +1,6 @@
 Name:    flux-core
 Version: 0.83.1
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
@@ -22,21 +22,25 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 # this, brp-mangle-shebangs strips the executable bit we set, breaking `flux modprobe`.
 %global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/
 
-BuildRequires: flux-security-devel >= 0.14
+%global cffi_minver        1.1
+%global ply_minver         3.9
+%global pyyaml_minver      3.10
 
-BuildRequires: pkgconfig(libzmq) >= 4.1.4
-BuildRequires: pkgconfig(jansson) >= 2.6
-BuildRequires: pkgconfig(hwloc) >= 2.1
+BuildRequires: pkgconfig(flux-security) >= 0.14
+
+BuildRequires: pkgconfig(libzmq) >= 4.0.4
+BuildRequires: pkgconfig(jansson) >= 2.9
+BuildRequires: pkgconfig(hwloc) >= 1.11.1
 BuildRequires: pkgconfig(sqlite3) >= 3.6.0
 BuildRequires: pkgconfig(bash-completion)
-BuildRequires: lua-devel >= 5.1
-BuildRequires: lz4-devel
+BuildRequires: pkgconfig(liblz4)
+BuildRequires: pkgconfig(uuid)
+BuildRequires: pkgconfig(ncurses)
+BuildRequires: pkgconfig(libarchive)
+BuildRequires: pkgconfig(systemd)
+BuildRequires: (lua-devel >= 5.1 and lua-devel < 5.5)
 BuildRequires: munge-devel
 BuildRequires: lua-posix
-BuildRequires: libuuid-devel
-BuildRequires: ncurses-devel
-BuildRequires: libarchive-devel
-BuildRequires: systemd-devel
 
 # for _tmpfilesdir
 BuildRequires: systemd-rpm-macros
@@ -57,30 +61,20 @@ BuildRequires: which
 BuildRequires: file
 BuildRequires: procps-ng
 
-# libtool CCLD of libflux-core.la adds -lsodium -lpgm -lgssapi_krb5
-BuildRequires: libsodium-devel >= 0.4.5
-BuildRequires: openpgm-devel
-BuildRequires: krb5-devel
-
 # rely on autoreq for most dependencies
-Requires: lua >= 5.1
-Requires: lua-posix >= 5.1
-Requires: sqlite >= 3.6.0
-Requires: ncurses
-Requires: python3
-Requires: python3-cffi
-Requires: python3-pyyaml
-Requires: python3-ply
+Requires: lua-posix
+Requires: python3-cffi >= %{cffi_minver}
+Requires: python3-pyyaml >= %{pyyaml_minver}
+Requires: python3-ply >= %{ply_minver}
 
-BuildRequires: python3
-BuildRequires: python3-devel
-BuildRequires: python3-cffi
-BuildRequires: python3-pyyaml
-BuildRequires: python3-ply
+BuildRequires: python3-devel >= 3.6
+BuildRequires: python3-cffi >= %{cffi_minver}
+BuildRequires: python3-pyyaml >= %{pyyaml_minver}
+BuildRequires: python3-ply >= %{ply_minver}
 BuildRequires: python3-setuptools
-BuildRequires: python3-sphinx
+BuildRequires: python3-sphinx >= 1.6.7
 BuildRequires: python3-sphinx_rtd_theme
-BuildRequires: python3-docutils
+BuildRequires: python3-docutils >= 0.11.0
 
 BuildRequires: autoconf
 BuildRequires: automake
@@ -280,6 +274,9 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.83.1-3
+- Clean up requirements and dependency versions
+
 * Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.83.1-2
 - Disable LTO and strict-aliasing optimizations
 
