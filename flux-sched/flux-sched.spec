@@ -1,5 +1,5 @@
 Name:    flux-sched
-Version: 0.49.0
+Version: 0.50.0
 Release: 2%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
