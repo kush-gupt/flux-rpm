@@ -1,5 +1,5 @@
 Name:    flux-accounting
-Version: 0.56.0
+Version: 0.57.1
 Release: 2%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
