@@ -1,6 +1,6 @@
 Name:    flux-core
 Version: 0.83.1
-Release: 3%{?dist}
+Release: 4%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
@@ -29,7 +29,7 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 BuildRequires: pkgconfig(flux-security) >= 0.14
 
 BuildRequires: pkgconfig(libzmq) >= 4.0.4
-BuildRequires: pkgconfig(jansson) >= 2.9
+BuildRequires: pkgconfig(jansson) >= 2.11
 BuildRequires: pkgconfig(hwloc) >= 1.11.1
 BuildRequires: pkgconfig(sqlite3) >= 3.6.0
 BuildRequires: pkgconfig(bash-completion)
@@ -274,6 +274,9 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Wed Apr 22 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.83.1-4
+- Bump jansson requirement to v2.11
+
 * Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.83.1-3
 - Clean up requirements and dependency versions
 

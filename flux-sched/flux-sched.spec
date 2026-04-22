@@ -1,6 +1,6 @@
 Name:    flux-sched
 Version: 0.49.0
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-sched
@@ -37,7 +37,7 @@ BuildRequires: gcc-c++
 %if 0%{?rhel} == 9
 BuildRequires: gcc-toolset-13-gcc-c++
 %endif
-BuildRequires: pkgconfig(jansson) >= 2.10
+BuildRequires: pkgconfig(jansson) >= 2.11
 BuildRequires: pkgconfig(hwloc) >= 2
 BuildRequires: pkgconfig(yaml-cpp) >= 0.5.1
 BuildRequires: pkgconfig(libedit) >= 3.0
@@ -150,6 +150,9 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
+* Wed Apr 22 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.49.0-3
+- Bump jansson requirement to v2.11
+
 * Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.49.0-2
 - Clean up requirements and dependency versions
 
