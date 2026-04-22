@@ -261,6 +261,12 @@ jobs:
           VERSION="${{ needs.check-flux-security.outputs.new_version }}"
           sed -i "s/^Version:.*/Version: ${VERSION}/" flux-security/flux-security.spec
           sed -i "s/^Release:.*/Release: 1%{?dist}/" flux-security/flux-security.spec
+          sed -i "/^%changelog$/r"<(cat <<-EOF
+          * $(date +'%a %b %d %Y') Kush Gupta <kugupta@redhat.com> - ${VERSION}-1
+          - Update to v${VERSION}
+          
+          EOF
+          ) flux-security/flux-security.spec
           SHA256=$(curl -sL "https://github.com/flux-framework/flux-security/releases/download/v${VERSION}/flux-security-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
           echo "SHA256 (flux-security-${VERSION}.tar.gz) = ${SHA256}" > flux-security/sources
 
@@ -285,8 +291,7 @@ jobs:
           - [ ] Check release notes for spec file changes
           - [ ] Verify patches are still needed for this version
           - [ ] Verify BuildRequires are still correct
-          - [ ] Test build locally if possible
-          - [ ] Add changelog entry"
+          - [ ] Test build locally if possible"
             NUM=$(gh issue create --title "$TITLE" --body "$BODY" --label enhancement --label flux-security | grep -oP '\d+$')
             echo "issue-number=$NUM" >> "$GITHUB_OUTPUT"
             echo "Created issue #$NUM"
@@ -310,7 +315,6 @@ jobs:
             - [ ] Verify patches are still needed for this version
             - [ ] Verify BuildRequires are still correct
             - [ ] Test build locally if possible
-            - [ ] Add changelog entry
           branch: update-flux-security-${{ needs.check-flux-security.outputs.new_version }}
           delete-branch: true
 
@@ -327,6 +331,12 @@ jobs:
           VERSION="${{ needs.check-flux-core.outputs.new_version }}"
           sed -i "s/^Version:.*/Version: ${VERSION}/" flux-core/flux-core.spec
           sed -i "s/^Release:.*/Release: 1%{?dist}/" flux-core/flux-core.spec
+          sed -i "/^%changelog$/r"<(cat <<-EOF
+          * $(date +'%a %b %d %Y') Kush Gupta <kugupta@redhat.com> - ${VERSION}-1
+          - Update to v${VERSION}
+          
+          EOF
+          ) flux-core/flux-core.spec
           SHA256=$(curl -sL "https://github.com/flux-framework/flux-core/releases/download/v${VERSION}/flux-core-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
           echo "SHA256 (flux-core-${VERSION}.tar.gz) = ${SHA256}" > flux-core/sources
 
@@ -351,8 +361,7 @@ jobs:
           - [ ] Check release notes for spec file changes
           - [ ] Verify patches are still needed for this version
           - [ ] Verify BuildRequires are still correct
-          - [ ] Test build locally if possible
-          - [ ] Add changelog entry"
+          - [ ] Test build locally if possible"
             NUM=$(gh issue create --title "$TITLE" --body "$BODY" --label enhancement --label flux-core | grep -oP '\d+$')
             echo "issue-number=$NUM" >> "$GITHUB_OUTPUT"
             echo "Created issue #$NUM"
@@ -376,7 +385,6 @@ jobs:
             - [ ] Verify patches are still needed for this version
             - [ ] Verify BuildRequires are still correct
             - [ ] Test build locally if possible
-            - [ ] Add changelog entry
           branch: update-flux-core-${{ needs.check-flux-core.outputs.new_version }}
           delete-branch: true
 
@@ -393,6 +401,12 @@ jobs:
           VERSION="${{ needs.check-flux-sched.outputs.new_version }}"
           sed -i "s/^Version:.*/Version: ${VERSION}/" flux-sched/flux-sched.spec
           sed -i "s/^Release:.*/Release: 1%{?dist}/" flux-sched/flux-sched.spec
+          sed -i "/^%changelog$/r"<(cat <<-EOF
+          * $(date +'%a %b %d %Y') Kush Gupta <kugupta@redhat.com> - ${VERSION}-1
+          - Update to v${VERSION}
+          
+          EOF
+          ) flux-sched/flux-sched.spec
           SHA256=$(curl -sL "https://github.com/flux-framework/flux-sched/releases/download/v${VERSION}/flux-sched-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
           echo "SHA256 (flux-sched-${VERSION}.tar.gz) = ${SHA256}" > flux-sched/sources
 
@@ -417,8 +431,7 @@ jobs:
           - [ ] Check release notes for spec file changes
           - [ ] Verify patches are still needed for this version
           - [ ] Verify BuildRequires are still correct
-          - [ ] Test build locally if possible
-          - [ ] Add changelog entry"
+          - [ ] Test build locally if possible"
             NUM=$(gh issue create --title "$TITLE" --body "$BODY" --label enhancement --label flux-sched | grep -oP '\d+$')
             echo "issue-number=$NUM" >> "$GITHUB_OUTPUT"
             echo "Created issue #$NUM"
@@ -442,7 +455,6 @@ jobs:
             - [ ] Verify patches are still needed for this version
             - [ ] Verify BuildRequires are still correct
             - [ ] Test build locally if possible
-            - [ ] Add changelog entry
           branch: update-flux-sched-${{ needs.check-flux-sched.outputs.new_version }}
           delete-branch: true
 
@@ -459,6 +471,12 @@ jobs:
           VERSION="${{ needs.check-flux-accounting.outputs.new_version }}"
           sed -i "s/^Version:.*/Version: ${VERSION}/" flux-accounting/flux-accounting.spec
           sed -i "s/^Release:.*/Release: 1%{?dist}/" flux-accounting/flux-accounting.spec
+          sed -i "/^%changelog$/r"<(cat <<-EOF
+          * $(date +'%a %b %d %Y') Kush Gupta <kugupta@redhat.com> - ${VERSION}-1
+          - Update to v${VERSION}
+          
+          EOF
+          ) flux-accounting/flux-accounting.spec
           SHA256=$(curl -sL "https://github.com/flux-framework/flux-accounting/releases/download/v${VERSION}/flux-accounting-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
           echo "SHA256 (flux-accounting-${VERSION}.tar.gz) = ${SHA256}" > flux-accounting/sources
 
@@ -483,8 +501,7 @@ jobs:
           - [ ] Check release notes for spec file changes
           - [ ] Verify patches are still needed for this version
           - [ ] Verify BuildRequires are still correct
-          - [ ] Test build locally if possible
-          - [ ] Add changelog entry"
+          - [ ] Test build locally if possible"
             NUM=$(gh issue create --title "$TITLE" --body "$BODY" --label enhancement --label flux-accounting | grep -oP '\d+$')
             echo "issue-number=$NUM" >> "$GITHUB_OUTPUT"
             echo "Created issue #$NUM"
@@ -508,6 +525,5 @@ jobs:
             - [ ] Verify patches are still needed for this version
             - [ ] Verify BuildRequires are still correct
             - [ ] Test build locally if possible
-            - [ ] Add changelog entry
           branch: update-flux-accounting-${{ needs.check-flux-accounting.outputs.new_version }}
           delete-branch: true
