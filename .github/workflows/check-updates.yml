@@ -260,6 +260,7 @@ jobs:
         run: |
           VERSION="${{ needs.check-flux-security.outputs.new_version }}"
           sed -i "s/^Version:.*/Version: ${VERSION}/" flux-security/flux-security.spec
+          sed -i "s/^Release:.*/Release: 1%{?dist}/" flux-security/flux-security.spec
           SHA256=$(curl -sL "https://github.com/flux-framework/flux-security/releases/download/v${VERSION}/flux-security-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
           echo "SHA256 (flux-security-${VERSION}.tar.gz) = ${SHA256}" > flux-security/sources
 
@@ -325,6 +326,7 @@ jobs:
         run: |
           VERSION="${{ needs.check-flux-core.outputs.new_version }}"
           sed -i "s/^Version:.*/Version: ${VERSION}/" flux-core/flux-core.spec
+          sed -i "s/^Release:.*/Release: 1%{?dist}/" flux-core/flux-core.spec
           SHA256=$(curl -sL "https://github.com/flux-framework/flux-core/releases/download/v${VERSION}/flux-core-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
           echo "SHA256 (flux-core-${VERSION}.tar.gz) = ${SHA256}" > flux-core/sources
 
@@ -390,6 +392,7 @@ jobs:
         run: |
           VERSION="${{ needs.check-flux-sched.outputs.new_version }}"
           sed -i "s/^Version:.*/Version: ${VERSION}/" flux-sched/flux-sched.spec
+          sed -i "s/^Release:.*/Release: 1%{?dist}/" flux-sched/flux-sched.spec
           SHA256=$(curl -sL "https://github.com/flux-framework/flux-sched/releases/download/v${VERSION}/flux-sched-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
           echo "SHA256 (flux-sched-${VERSION}.tar.gz) = ${SHA256}" > flux-sched/sources
 
@@ -455,6 +458,7 @@ jobs:
         run: |
           VERSION="${{ needs.check-flux-accounting.outputs.new_version }}"
           sed -i "s/^Version:.*/Version: ${VERSION}/" flux-accounting/flux-accounting.spec
+          sed -i "s/^Release:.*/Release: 1%{?dist}/" flux-accounting/flux-accounting.spec
           SHA256=$(curl -sL "https://github.com/flux-framework/flux-accounting/releases/download/v${VERSION}/flux-accounting-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
           echo "SHA256 (flux-accounting-${VERSION}.tar.gz) = ${SHA256}" > flux-accounting/sources
 
