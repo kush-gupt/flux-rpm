@@ -20,7 +20,7 @@ jobs:
   # Check for version updates (runs in parallel)
   # ============================================================
   check-all:
-    name: Check ${{ matrix.package }} updates
+    name: Check ${{ matrix.package }}
     runs-on: ubuntu-latest
     continue-on-error: true
     strategy:
@@ -34,60 +34,47 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Get current version
-        id: current
-        run: |
-          version=$(grep '^Version:' ${{ matrix.package }}/${{ matrix.package }}.spec | awk '{print $2}')
-          echo "version=$version" >> $GITHUB_OUTPUT
-
-      - name: Get latest release
-        id: latest
-        run: |
-          response=$(curl -sf "https://api.github.com/repos/flux-framework/${{ matrix.package }}/releases?per_page=1") || {
-            echo "Failed to fetch releases from GitHub API"
-            echo "version=" >> $GITHUB_OUTPUT
-            exit 0
-          }
-          version=$(echo "$response" | jq -r '.[0].tag_name // empty' | sed 's/^v//')
-          if [ -z "$version" ]; then
-            echo "Could not parse version from GitHub API response"
-            echo "version=" >> $GITHUB_OUTPUT
-          else
-            echo "Latest version: $version"
-            echo "version=$version" >> $GITHUB_OUTPUT
-          fi
-
       - name: Check for update
-        id: new
+        id: check
         run: |
-          current="${{ steps.current.outputs.version }}"
-          latest="${{ steps.latest.outputs.version }}"
-
+          current=$(grep '^Version:' ${{ matrix.package }}/${{ matrix.package }}.spec | awk '{print $2}')
           if [ -z "$current" ]; then
             echo "::error::Could not determine current version from spec file"
+          else
+            echo "Current version: $current"
+            echo "current=$current" >> $GITHUB_OUTPUT
+          fi
+          response=$(curl -sf "https://api.github.com/repos/flux-framework/${{ matrix.package }}/releases?per_page=1") || {
+            response=""
+            echo "::warning::Failed to fetch latest release from GitHub API"
+          }
+          if [ -n "$response" ]; then
+            latest=$(echo "$response" | jq -r '.[0].tag_name // empty' | sed 's/^v//')
+            if [ -z "$latest" ]; then
+            echo "::error::Could not parse version from GitHub API response"
+            else
+              echo "Latest version: $latest"
+            fi
+          fi
+          if [ -z "$current" ] || [ -z "$latest" ]; then
+            echo "::error::Could not determine both current and latest versions, skipping update check"
             exit 1
           fi
-
-          if [ -z "$latest" ]; then
-            echo "::warning::Could not fetch latest version from GitHub API, skipping update check"
-            exit 0
-          fi
-
           if [ "$current" != "$latest" ]; then
-            echo "version=$latest" >> $GITHUB_OUTPUT
+            echo "latest=$latest" >> $GITHUB_OUTPUT
             echo "Update available: $current -> $latest"
           else
             echo "No update available (current: $current)"
           fi
 
   # ============================================================
-  # Update jobs (only run if new version detected)
-  # Each job: bumps version + sources, creates tracking issue + PR
+  # Update steps (only run if new version detected)
+  # Each step bumps version + sources, creates tracking issue + PR
   # ============================================================
       - name: Update spec and sources
-        if: steps.new.outputs.version != ''
+        if: steps.check.outputs.latest != ''
         run: |
-          VERSION="${{ steps.new.outputs.version }}"
+          VERSION="${{ steps.check.outputs.latest }}"
           SPECFILE="${{ matrix.package }}/${{ matrix.package }}.spec"
           sed -i "s/^Version:.*/Version: ${VERSION}/" ${SPECFILE}
           sed -i "s/^Release:.*/Release: 1%{?dist}/" ${SPECFILE}
@@ -101,12 +88,12 @@ jobs:
           echo "SHA256 (${{ matrix.package }}-${VERSION}.tar.gz) = ${SHA256}" > ${{ matrix.package }}/sources
 
       - name: Find or create tracking issue
-        if: steps.new.outputs.version != ''
+        if: steps.check.outputs.latest != ''
         id: create-issue
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TITLE="Update ${{ matrix.package }} to ${{ steps.new.outputs.version }}"
+          TITLE="Update ${{ matrix.package }} to ${{ steps.check.outputs.latest }}"
           EXISTING=$(gh issue list --search "$TITLE" --state open --json number --jq '.[0].number // empty')
           if [ -n "$EXISTING" ]; then
             echo "issue-number=$EXISTING" >> "$GITHUB_OUTPUT"
@@ -114,9 +101,9 @@ jobs:
           else
             BODY="New ${{ matrix.package }} release detected.
 
-          **Current version:** ${{ steps.current.outputs.version }}
-          **New version:** ${{ steps.new.outputs.version }}
-          **Release:** https://github.com/flux-framework/${{ matrix.package }}/releases/tag/v${{ steps.new.outputs.version }}
+          **Current version:** ${{ steps.check.outputs.current }}
+          **New version:** ${{ steps.check.outputs.latest }}
+          **Release:** https://github.com/flux-framework/${{ matrix.package }}/releases/tag/v${{ steps.check.outputs.latest }}
 
           An automated PR has been created with the version bump. Please review:
           - [ ] Check release notes for spec file changes
@@ -129,16 +116,16 @@ jobs:
           fi
 
       - name: Create Pull Request
-        if: steps.new.outputs.version != ''
+        if: steps.check.outputs.latest != ''
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update ${{ matrix.package }} to ${{ steps.new.outputs.version }}"
-          title: "Update ${{ matrix.package }} to ${{ steps.new.outputs.version }}"
+          commit-message: "Update ${{ matrix.package }} to ${{ steps.check.outputs.latest }}"
+          title: "Update ${{ matrix.package }} to ${{ steps.check.outputs.latest }}"
           body: |
-            Automated version bump for ${{ matrix.package }} from ${{ steps.current.outputs.version }} to ${{ steps.new.outputs.version }}.
+            Automated version bump for ${{ matrix.package }} from ${{ steps.check.outputs.current }} to ${{ steps.check.outputs.latest }}.
 
-            Release: https://github.com/flux-framework/${{ matrix.package }}/releases/tag/v${{ steps.new.outputs.version }}
+            Release: https://github.com/flux-framework/${{ matrix.package }}/releases/tag/v${{ steps.check.outputs.latest }}
 
             Closes #${{ steps.create-issue.outputs.issue-number }}
 
@@ -147,6 +134,6 @@ jobs:
             - [ ] Verify patches are still needed for this version
             - [ ] Verify BuildRequires are still correct
             - [ ] Test build locally if possible
-          branch: update-${{ matrix.package }}-${{ steps.new.outputs.version }}
+          branch: update-${{ matrix.package }}-${{ steps.check.outputs.latest }}
           delete-branch: true
 
