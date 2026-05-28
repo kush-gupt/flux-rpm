@@ -1,14 +1,10 @@
 Name:    flux-accounting
-Version: 0.56.0
-Release: 2%{?dist}
+Version: 0.57.2
+Release: 1%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-accounting
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
-
-# Python 3.12+ compatibility: imp module was removed (PEP 594)
-# Backport of automake 1.16.5+ fix for py-compile
-Patch0:  py-compile-python312.patch
 
 # Exclude flux Python subcommands from shebang mangling - these files are run
 # through the `flux python` wrapper and don't have shebangs by design. Without
@@ -20,7 +16,7 @@ Patch0:  py-compile-python312.patch
 BuildRequires: pkgconfig(jansson) >= 2.10
 BuildRequires: pkgconfig(sqlite3) >= 3.6.0
 BuildRequires: pkgconfig(systemd)
-BuildRequires: python3-devel >= 3.9
+BuildRequires: python3-devel >= 3.6
 BuildRequires: python3-sphinx >= 1.6.7
 BuildRequires: python3-sphinx_rtd_theme
 BuildRequires: python3-docutils >= 0.11.0
@@ -129,6 +125,11 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man1/*.1*
 
 %changelog
+* Thu May 28 2026 Kush Gupta <kugupta@redhat.com> - 0.57.2-1
+- Update to v0.57.2
+- Align python3-devel requirement (>= 3.6) with flux-core and flux-sched
+- Drop py-compile-python312.patch (fixed upstream)
+
 * Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.56.0-2
 - Clean up requirements and dependency versions
 - Package new changelog (NEWS.md) and LICENSE files

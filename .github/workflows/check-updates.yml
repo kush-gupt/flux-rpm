@@ -17,290 +17,115 @@ permissions:
 
 jobs:
   # ============================================================
-  # Check for version updates (runs in parallel)
+  # Check for version updates and create PRs (matrix strategy)
   # ============================================================
-  check-flux-security:
-    name: Check flux-security updates
+  update:
+    name: Update ${{ matrix.package }}
     runs-on: ubuntu-latest
-    outputs:
-      new_version: ${{ steps.check.outputs.new_version }}
-      current_version: ${{ steps.check.outputs.current_version }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: flux-security
+          - package: flux-core
+          - package: flux-sched
+          - package: flux-accounting
     steps:
       - uses: actions/checkout@v5
-
-      - name: Get current version
-        id: current
-        run: |
-          version=$(grep '^Version:' flux-security/flux-security.spec | awk '{print $2}')
-          echo "version=$version" >> $GITHUB_OUTPUT
-
-      - name: Get latest release
-        id: latest
-        run: |
-          response=$(curl -sf "https://api.github.com/repos/flux-framework/flux-security/releases?per_page=1") || {
-            echo "Failed to fetch releases from GitHub API"
-            echo "version=" >> $GITHUB_OUTPUT
-            exit 0
-          }
-          version=$(echo "$response" | jq -r '.[0].tag_name // empty' | sed 's/^v//')
-          if [ -z "$version" ]; then
-            echo "Could not parse version from GitHub API response"
-            echo "version=" >> $GITHUB_OUTPUT
-          else
-            echo "Latest version: $version"
-            echo "version=$version" >> $GITHUB_OUTPUT
-          fi
 
       - name: Check for update
         id: check
         run: |
-          current="${{ steps.current.outputs.version }}"
-          latest="${{ steps.latest.outputs.version }}"
-          echo "current_version=$current" >> $GITHUB_OUTPUT
-
+          PACKAGE="${{ matrix.package }}"
+          current=$(grep '^Version:' ${PACKAGE}/${PACKAGE}.spec | awk '{print $2}')
           if [ -z "$current" ]; then
             echo "::error::Could not determine current version from spec file"
             exit 1
           fi
+          echo "Current version: $current"
+          echo "current=$current" >> $GITHUB_OUTPUT
 
-          if [ -z "$latest" ]; then
-            echo "::warning::Could not fetch latest version from GitHub API, skipping update check"
-            exit 0
-          fi
-
-          if [ "$current" != "$latest" ]; then
-            echo "new_version=$latest" >> $GITHUB_OUTPUT
-            echo "Update available: $current -> $latest"
-          else
-            echo "No update available (current: $current)"
-          fi
-
-  check-flux-core:
-    name: Check flux-core updates
-    runs-on: ubuntu-latest
-    outputs:
-      new_version: ${{ steps.check.outputs.new_version }}
-      current_version: ${{ steps.check.outputs.current_version }}
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Get current version
-        id: current
-        run: |
-          version=$(grep '^Version:' flux-core/flux-core.spec | awk '{print $2}')
-          echo "version=$version" >> $GITHUB_OUTPUT
-
-      - name: Get latest release
-        id: latest
-        run: |
-          response=$(curl -sf "https://api.github.com/repos/flux-framework/flux-core/releases?per_page=1") || {
-            echo "Failed to fetch releases from GitHub API"
-            echo "version=" >> $GITHUB_OUTPUT
+          response=$(curl -sf "https://api.github.com/repos/flux-framework/${PACKAGE}/releases?per_page=1") || {
+            echo "::warning::Failed to fetch latest release from GitHub API"
             exit 0
           }
-          version=$(echo "$response" | jq -r '.[0].tag_name // empty' | sed 's/^v//')
-          if [ -z "$version" ]; then
-            echo "Could not parse version from GitHub API response"
-            echo "version=" >> $GITHUB_OUTPUT
-          else
-            echo "Latest version: $version"
-            echo "version=$version" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Check for update
-        id: check
-        run: |
-          current="${{ steps.current.outputs.version }}"
-          latest="${{ steps.latest.outputs.version }}"
-          echo "current_version=$current" >> $GITHUB_OUTPUT
-
-          if [ -z "$current" ]; then
-            echo "::error::Could not determine current version from spec file"
-            exit 1
-          fi
-
+          latest=$(echo "$response" | jq -r '.[0].tag_name // empty' | sed 's/^v//')
           if [ -z "$latest" ]; then
-            echo "::warning::Could not fetch latest version from GitHub API, skipping update check"
+            echo "::warning::Could not parse version from GitHub API response"
             exit 0
           fi
+          echo "Latest version: $latest"
 
           if [ "$current" != "$latest" ]; then
-            echo "new_version=$latest" >> $GITHUB_OUTPUT
+            echo "latest=$latest" >> $GITHUB_OUTPUT
             echo "Update available: $current -> $latest"
           else
             echo "No update available (current: $current)"
           fi
-
-  check-flux-sched:
-    name: Check flux-sched updates
-    runs-on: ubuntu-latest
-    outputs:
-      new_version: ${{ steps.check.outputs.new_version }}
-      current_version: ${{ steps.check.outputs.current_version }}
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Get current version
-        id: current
-        run: |
-          version=$(grep '^Version:' flux-sched/flux-sched.spec | awk '{print $2}')
-          echo "version=$version" >> $GITHUB_OUTPUT
-
-      - name: Get latest release
-        id: latest
-        run: |
-          response=$(curl -sf "https://api.github.com/repos/flux-framework/flux-sched/releases?per_page=1") || {
-            echo "Failed to fetch releases from GitHub API"
-            echo "version=" >> $GITHUB_OUTPUT
-            exit 0
-          }
-          version=$(echo "$response" | jq -r '.[0].tag_name // empty' | sed 's/^v//')
-          if [ -z "$version" ]; then
-            echo "Could not parse version from GitHub API response"
-            echo "version=" >> $GITHUB_OUTPUT
-          else
-            echo "Latest version: $version"
-            echo "version=$version" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Check for update
-        id: check
-        run: |
-          current="${{ steps.current.outputs.version }}"
-          latest="${{ steps.latest.outputs.version }}"
-          echo "current_version=$current" >> $GITHUB_OUTPUT
-
-          if [ -z "$current" ]; then
-            echo "::error::Could not determine current version from spec file"
-            exit 1
-          fi
-
-          if [ -z "$latest" ]; then
-            echo "::warning::Could not fetch latest version from GitHub API, skipping update check"
-            exit 0
-          fi
-
-          if [ "$current" != "$latest" ]; then
-            echo "new_version=$latest" >> $GITHUB_OUTPUT
-            echo "Update available: $current -> $latest"
-          else
-            echo "No update available (current: $current)"
-          fi
-
-  check-flux-accounting:
-    name: Check flux-accounting updates
-    runs-on: ubuntu-latest
-    outputs:
-      new_version: ${{ steps.check.outputs.new_version }}
-      current_version: ${{ steps.check.outputs.current_version }}
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Get current version
-        id: current
-        run: |
-          version=$(grep '^Version:' flux-accounting/flux-accounting.spec | awk '{print $2}')
-          echo "version=$version" >> $GITHUB_OUTPUT
-
-      - name: Get latest release
-        id: latest
-        run: |
-          response=$(curl -sf "https://api.github.com/repos/flux-framework/flux-accounting/releases?per_page=1") || {
-            echo "Failed to fetch releases from GitHub API"
-            echo "version=" >> $GITHUB_OUTPUT
-            exit 0
-          }
-          version=$(echo "$response" | jq -r '.[0].tag_name // empty' | sed 's/^v//')
-          if [ -z "$version" ]; then
-            echo "Could not parse version from GitHub API response"
-            echo "version=" >> $GITHUB_OUTPUT
-          else
-            echo "Latest version: $version"
-            echo "version=$version" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Check for update
-        id: check
-        run: |
-          current="${{ steps.current.outputs.version }}"
-          latest="${{ steps.latest.outputs.version }}"
-          echo "current_version=$current" >> $GITHUB_OUTPUT
-
-          if [ -z "$current" ]; then
-            echo "::error::Could not determine current version from spec file"
-            exit 1
-          fi
-
-          if [ -z "$latest" ]; then
-            echo "::warning::Could not fetch latest version from GitHub API, skipping update check"
-            exit 0
-          fi
-
-          if [ "$current" != "$latest" ]; then
-            echo "new_version=$latest" >> $GITHUB_OUTPUT
-            echo "Update available: $current -> $latest"
-          else
-            echo "No update available (current: $current)"
-          fi
-
-  # ============================================================
-  # Update jobs (only run if new version detected)
-  # Each job: bumps version + sources, creates tracking issue + PR
-  # ============================================================
-
-  update-flux-security:
-    name: Update flux-security
-    needs: [check-flux-security]
-    if: needs.check-flux-security.outputs.new_version != ''
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
 
       - name: Update spec and sources
+        if: steps.check.outputs.latest != ''
         run: |
-          VERSION="${{ needs.check-flux-security.outputs.new_version }}"
-          sed -i "s/^Version:.*/Version: ${VERSION}/" flux-security/flux-security.spec
-          SHA256=$(curl -sL "https://github.com/flux-framework/flux-security/releases/download/v${VERSION}/flux-security-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
-          echo "SHA256 (flux-security-${VERSION}.tar.gz) = ${SHA256}" > flux-security/sources
+          VERSION="${{ steps.check.outputs.latest }}"
+          PACKAGE="${{ matrix.package }}"
+
+          sed -i "s/^Version:.*/Version: ${VERSION}/" ${PACKAGE}/${PACKAGE}.spec
+          sed -i 's/^Release:.*/Release: 1%{?dist}/' ${PACKAGE}/${PACKAGE}.spec
+
+          SHA256=$(curl -sL "https://github.com/flux-framework/${PACKAGE}/releases/download/v${VERSION}/${PACKAGE}-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
+          echo "SHA256 (${PACKAGE}-${VERSION}.tar.gz) = ${SHA256}" > ${PACKAGE}/sources
+
+          DATE=$(date -u '+%a %b %d %Y')
+          {
+            echo "%changelog"
+            echo "* ${DATE} github-actions[bot] <github-actions[bot]@users.noreply.github.com> - ${VERSION}-1"
+            echo "- Update to v${VERSION}"
+            echo ""
+            sed -n '/%changelog/,$ { /%changelog/d; p }' ${PACKAGE}/${PACKAGE}.spec
+          } > /tmp/changelog
+          sed -i '/%changelog/,$ d' ${PACKAGE}/${PACKAGE}.spec
+          cat /tmp/changelog >> ${PACKAGE}/${PACKAGE}.spec
 
       - name: Find or create tracking issue
         id: create-issue
+        if: steps.check.outputs.latest != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          TITLE="Update flux-security to ${{ needs.check-flux-security.outputs.new_version }}"
+          TITLE="Update ${{ matrix.package }} to ${{ steps.check.outputs.latest }}"
           EXISTING=$(gh issue list --search "$TITLE" --state open --json number --jq '.[0].number // empty')
           if [ -n "$EXISTING" ]; then
             echo "issue-number=$EXISTING" >> "$GITHUB_OUTPUT"
             echo "Reusing existing issue #$EXISTING"
           else
-            BODY="New flux-security release detected.
+            BODY="New ${{ matrix.package }} release detected.
 
-          **Current version:** ${{ needs.check-flux-security.outputs.current_version }}
-          **New version:** ${{ needs.check-flux-security.outputs.new_version }}
-          **Release:** https://github.com/flux-framework/flux-security/releases/tag/v${{ needs.check-flux-security.outputs.new_version }}
+          **Current version:** ${{ steps.check.outputs.current }}
+          **New version:** ${{ steps.check.outputs.latest }}
+          **Release:** https://github.com/flux-framework/${{ matrix.package }}/releases/tag/v${{ steps.check.outputs.latest }}
 
           An automated PR has been created with the version bump. Please review:
           - [ ] Check release notes for spec file changes
           - [ ] Verify patches are still needed for this version
           - [ ] Verify BuildRequires are still correct
-          - [ ] Test build locally if possible
-          - [ ] Add changelog entry"
-            NUM=$(gh issue create --title "$TITLE" --body "$BODY" --label enhancement --label flux-security | grep -oP '\d+$')
+          - [ ] Test build locally if possible"
+            NUM=$(gh issue create --title "$TITLE" --body "$BODY" --label enhancement --label ${{ matrix.package }} | grep -oP '\d+$')
             echo "issue-number=$NUM" >> "$GITHUB_OUTPUT"
             echo "Created issue #$NUM"
           fi
 
       - name: Create Pull Request
+        if: steps.check.outputs.latest != ''
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update flux-security to ${{ needs.check-flux-security.outputs.new_version }}"
-          title: "Update flux-security to ${{ needs.check-flux-security.outputs.new_version }}"
+          commit-message: "Update ${{ matrix.package }} to ${{ steps.check.outputs.latest }}"
+          title: "Update ${{ matrix.package }} to ${{ steps.check.outputs.latest }}"
           body: |
-            Automated version bump for flux-security from ${{ needs.check-flux-security.outputs.current_version }} to ${{ needs.check-flux-security.outputs.new_version }}.
+            Automated version bump for ${{ matrix.package }} from ${{ steps.check.outputs.current }} to ${{ steps.check.outputs.latest }}.
 
-            Release: https://github.com/flux-framework/flux-security/releases/tag/v${{ needs.check-flux-security.outputs.new_version }}
+            Release: https://github.com/flux-framework/${{ matrix.package }}/releases/tag/v${{ steps.check.outputs.latest }}
 
             Closes #${{ steps.create-issue.outputs.issue-number }}
 
@@ -309,201 +134,5 @@ jobs:
             - [ ] Verify patches are still needed for this version
             - [ ] Verify BuildRequires are still correct
             - [ ] Test build locally if possible
-            - [ ] Add changelog entry
-          branch: update-flux-security-${{ needs.check-flux-security.outputs.new_version }}
-          delete-branch: true
-
-  update-flux-core:
-    name: Update flux-core
-    needs: [check-flux-core]
-    if: needs.check-flux-core.outputs.new_version != ''
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Update spec and sources
-        run: |
-          VERSION="${{ needs.check-flux-core.outputs.new_version }}"
-          sed -i "s/^Version:.*/Version: ${VERSION}/" flux-core/flux-core.spec
-          SHA256=$(curl -sL "https://github.com/flux-framework/flux-core/releases/download/v${VERSION}/flux-core-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
-          echo "SHA256 (flux-core-${VERSION}.tar.gz) = ${SHA256}" > flux-core/sources
-
-      - name: Find or create tracking issue
-        id: create-issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TITLE="Update flux-core to ${{ needs.check-flux-core.outputs.new_version }}"
-          EXISTING=$(gh issue list --search "$TITLE" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$EXISTING" ]; then
-            echo "issue-number=$EXISTING" >> "$GITHUB_OUTPUT"
-            echo "Reusing existing issue #$EXISTING"
-          else
-            BODY="New flux-core release detected.
-
-          **Current version:** ${{ needs.check-flux-core.outputs.current_version }}
-          **New version:** ${{ needs.check-flux-core.outputs.new_version }}
-          **Release:** https://github.com/flux-framework/flux-core/releases/tag/v${{ needs.check-flux-core.outputs.new_version }}
-
-          An automated PR has been created with the version bump. Please review:
-          - [ ] Check release notes for spec file changes
-          - [ ] Verify patches are still needed for this version
-          - [ ] Verify BuildRequires are still correct
-          - [ ] Test build locally if possible
-          - [ ] Add changelog entry"
-            NUM=$(gh issue create --title "$TITLE" --body "$BODY" --label enhancement --label flux-core | grep -oP '\d+$')
-            echo "issue-number=$NUM" >> "$GITHUB_OUTPUT"
-            echo "Created issue #$NUM"
-          fi
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update flux-core to ${{ needs.check-flux-core.outputs.new_version }}"
-          title: "Update flux-core to ${{ needs.check-flux-core.outputs.new_version }}"
-          body: |
-            Automated version bump for flux-core from ${{ needs.check-flux-core.outputs.current_version }} to ${{ needs.check-flux-core.outputs.new_version }}.
-
-            Release: https://github.com/flux-framework/flux-core/releases/tag/v${{ needs.check-flux-core.outputs.new_version }}
-
-            Closes #${{ steps.create-issue.outputs.issue-number }}
-
-            Please review:
-            - [ ] Check release notes for spec file changes
-            - [ ] Verify patches are still needed for this version
-            - [ ] Verify BuildRequires are still correct
-            - [ ] Test build locally if possible
-            - [ ] Add changelog entry
-          branch: update-flux-core-${{ needs.check-flux-core.outputs.new_version }}
-          delete-branch: true
-
-  update-flux-sched:
-    name: Update flux-sched
-    needs: [check-flux-sched]
-    if: needs.check-flux-sched.outputs.new_version != ''
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Update spec and sources
-        run: |
-          VERSION="${{ needs.check-flux-sched.outputs.new_version }}"
-          sed -i "s/^Version:.*/Version: ${VERSION}/" flux-sched/flux-sched.spec
-          SHA256=$(curl -sL "https://github.com/flux-framework/flux-sched/releases/download/v${VERSION}/flux-sched-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
-          echo "SHA256 (flux-sched-${VERSION}.tar.gz) = ${SHA256}" > flux-sched/sources
-
-      - name: Find or create tracking issue
-        id: create-issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TITLE="Update flux-sched to ${{ needs.check-flux-sched.outputs.new_version }}"
-          EXISTING=$(gh issue list --search "$TITLE" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$EXISTING" ]; then
-            echo "issue-number=$EXISTING" >> "$GITHUB_OUTPUT"
-            echo "Reusing existing issue #$EXISTING"
-          else
-            BODY="New flux-sched release detected.
-
-          **Current version:** ${{ needs.check-flux-sched.outputs.current_version }}
-          **New version:** ${{ needs.check-flux-sched.outputs.new_version }}
-          **Release:** https://github.com/flux-framework/flux-sched/releases/tag/v${{ needs.check-flux-sched.outputs.new_version }}
-
-          An automated PR has been created with the version bump. Please review:
-          - [ ] Check release notes for spec file changes
-          - [ ] Verify patches are still needed for this version
-          - [ ] Verify BuildRequires are still correct
-          - [ ] Test build locally if possible
-          - [ ] Add changelog entry"
-            NUM=$(gh issue create --title "$TITLE" --body "$BODY" --label enhancement --label flux-sched | grep -oP '\d+$')
-            echo "issue-number=$NUM" >> "$GITHUB_OUTPUT"
-            echo "Created issue #$NUM"
-          fi
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update flux-sched to ${{ needs.check-flux-sched.outputs.new_version }}"
-          title: "Update flux-sched to ${{ needs.check-flux-sched.outputs.new_version }}"
-          body: |
-            Automated version bump for flux-sched from ${{ needs.check-flux-sched.outputs.current_version }} to ${{ needs.check-flux-sched.outputs.new_version }}.
-
-            Release: https://github.com/flux-framework/flux-sched/releases/tag/v${{ needs.check-flux-sched.outputs.new_version }}
-
-            Closes #${{ steps.create-issue.outputs.issue-number }}
-
-            Please review:
-            - [ ] Check release notes for spec file changes
-            - [ ] Verify patches are still needed for this version
-            - [ ] Verify BuildRequires are still correct
-            - [ ] Test build locally if possible
-            - [ ] Add changelog entry
-          branch: update-flux-sched-${{ needs.check-flux-sched.outputs.new_version }}
-          delete-branch: true
-
-  update-flux-accounting:
-    name: Update flux-accounting
-    needs: [check-flux-accounting]
-    if: needs.check-flux-accounting.outputs.new_version != ''
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Update spec and sources
-        run: |
-          VERSION="${{ needs.check-flux-accounting.outputs.new_version }}"
-          sed -i "s/^Version:.*/Version: ${VERSION}/" flux-accounting/flux-accounting.spec
-          SHA256=$(curl -sL "https://github.com/flux-framework/flux-accounting/releases/download/v${VERSION}/flux-accounting-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
-          echo "SHA256 (flux-accounting-${VERSION}.tar.gz) = ${SHA256}" > flux-accounting/sources
-
-      - name: Find or create tracking issue
-        id: create-issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          TITLE="Update flux-accounting to ${{ needs.check-flux-accounting.outputs.new_version }}"
-          EXISTING=$(gh issue list --search "$TITLE" --state open --json number --jq '.[0].number // empty')
-          if [ -n "$EXISTING" ]; then
-            echo "issue-number=$EXISTING" >> "$GITHUB_OUTPUT"
-            echo "Reusing existing issue #$EXISTING"
-          else
-            BODY="New flux-accounting release detected.
-
-          **Current version:** ${{ needs.check-flux-accounting.outputs.current_version }}
-          **New version:** ${{ needs.check-flux-accounting.outputs.new_version }}
-          **Release:** https://github.com/flux-framework/flux-accounting/releases/tag/v${{ needs.check-flux-accounting.outputs.new_version }}
-
-          An automated PR has been created with the version bump. Please review:
-          - [ ] Check release notes for spec file changes
-          - [ ] Verify patches are still needed for this version
-          - [ ] Verify BuildRequires are still correct
-          - [ ] Test build locally if possible
-          - [ ] Add changelog entry"
-            NUM=$(gh issue create --title "$TITLE" --body "$BODY" --label enhancement --label flux-accounting | grep -oP '\d+$')
-            echo "issue-number=$NUM" >> "$GITHUB_OUTPUT"
-            echo "Created issue #$NUM"
-          fi
-
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "Update flux-accounting to ${{ needs.check-flux-accounting.outputs.new_version }}"
-          title: "Update flux-accounting to ${{ needs.check-flux-accounting.outputs.new_version }}"
-          body: |
-            Automated version bump for flux-accounting from ${{ needs.check-flux-accounting.outputs.current_version }} to ${{ needs.check-flux-accounting.outputs.new_version }}.
-
-            Release: https://github.com/flux-framework/flux-accounting/releases/tag/v${{ needs.check-flux-accounting.outputs.new_version }}
-
-            Closes #${{ steps.create-issue.outputs.issue-number }}
-
-            Please review:
-            - [ ] Check release notes for spec file changes
-            - [ ] Verify patches are still needed for this version
-            - [ ] Verify BuildRequires are still correct
-            - [ ] Test build locally if possible
-            - [ ] Add changelog entry
-          branch: update-flux-accounting-${{ needs.check-flux-accounting.outputs.new_version }}
+          branch: update-${{ matrix.package }}-${{ steps.check.outputs.latest }}
           delete-branch: true
