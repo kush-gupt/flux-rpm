@@ -1,6 +1,6 @@
 Name:    flux-core
-Version: 0.83.1
-Release: 3%{?dist}
+Version: 0.85.0
+Release: 1%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
@@ -29,7 +29,7 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 BuildRequires: pkgconfig(flux-security) >= 0.14
 
 BuildRequires: pkgconfig(libzmq) >= 4.0.4
-BuildRequires: pkgconfig(jansson) >= 2.9
+BuildRequires: pkgconfig(jansson) >= 2.11
 BuildRequires: pkgconfig(hwloc) >= 1.11.1
 BuildRequires: pkgconfig(sqlite3) >= 3.6.0
 BuildRequires: pkgconfig(bash-completion)
@@ -274,6 +274,11 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Thu May 28 2026 Kush Gupta <kugupta@redhat.com> - 0.85.0-1
+- Update to v0.85.0
+- Bump jansson requirement to >= 2.11 (upstream #7554)
+- sdexec device containment, CLI plugins, afterstart dependency scheme
+
 * Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.83.1-3
 - Clean up requirements and dependency versions
 

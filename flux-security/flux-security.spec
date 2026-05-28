@@ -1,16 +1,11 @@
 Name:    flux-security
-Version: 0.14.0
-Release: 3%{?dist}
+Version: 0.15.0
+Release: 1%{?dist}
 
 Summary: Flux Framework Security Components
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-security
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
-
-# Fix GCC 16 const-correctness build failure (based on PR #211)
-# https://github.com/flux-framework/flux-security/pull/211
-# Note: Includes additional fix for missing const in payload_decode_cpy
-Patch0:  211.patch
 
 BuildRequires: pkgconfig(libsodium) >= 1.0.14
 BuildRequires: pkgconfig(jansson) >= 2.10
@@ -110,6 +105,11 @@ mkdir -p %{buildroot}%{_sysconfdir}/flux/imp/conf.d
 %{_mandir}/man3/*.3*
 
 %changelog
+* Thu May 28 2026 Kush Gupta <kugupta@redhat.com> - 0.15.0-1
+- Update to v0.15.0
+- Drop 211.patch (merged upstream in v0.15.0)
+- BPF device containment, IMP log-level key, fuzzing fixes
+
 * Fri Mar 13 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.14.0-3
 - Clean up requirements and dependency versions
 

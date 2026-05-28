@@ -1,2 +1,7 @@
+# These filters apply to built RPMs. When running rpmlint on only the spec file,
+# they won't match anything. Set badness to 0 so unused filters don't count as
+# errors during spec-only linting.
+setBadness('unused-rpmlintrc-filter', 0)
+
 # Domain-specific term for fair share scheduling
 addFilter("spelling-error.*fairshare")
