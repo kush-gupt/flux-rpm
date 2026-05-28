@@ -37,10 +37,10 @@ These adaptations apply across the four packages where applicable. Not every ite
 |----------|--------|-------|
 | `make %{?_smp_mflags}` | `%make_build` | flux-sched already used `%make_build`; flux-security had no `make` in `%build` |
 | `make install DESTDIR=$RPM_BUILD_ROOT` | `%make_install` | flux-sched already used `%make_install`; Fedora flux-sched uses `%cmake_install` |
-| `$RPM_BUILD_ROOT` / `${RPM_BUILD_ROOT}` | `%{buildroot}` | |
+| `$RPM_BUILD_ROOT` / `${RPM_BUILD_ROOT}` | `%{buildroot}` | In `%install`, `%check`, and `%files` sections |
 | `%post -p /sbin/ldconfig` | `%ldconfig_scriptlets` | flux-sched had no ldconfig at all; `%ldconfig_scriptlets` was added |
-| `%define` | `%global` (where kept) | |
-| `|| (cat config.log && exit 1)` after `%configure` | removed | rpmbuild handles configure failures natively |
+| `%define` | `%global` (where kept) | `%define` is local to each section; `%global` spans the whole spec |
+| `\|\| (cat config.log && exit 1)` after `%configure` | removed | rpmbuild handles configure failures natively |
 
 ### Build Dependencies
 

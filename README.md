@@ -19,7 +19,7 @@ Heavily assisted through Cursor IDE with Claude Opus, but all code is reviewed b
 
 ## Installation
 
-Available for **Fedora** 42, 43, Rawhide and **EPEL** 9, 10 via COPR. Packages must be installed in dependency order:
+Available for **Fedora** 43, 44, Rawhide and **EPEL** 9, 10 via COPR. Packages must be installed in dependency order:
 
 ```
 flux-security → flux-core → flux-sched
@@ -55,24 +55,24 @@ sudo usermod -a -G mock $USER
 ./scripts/build-srpm.sh all
 
 # Build with mock (in order: security -> core -> sched/accounting)
-mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-security-*.src.rpm
-mock -r fedora-41-x86_64 --install /var/lib/mock/fedora-41-x86_64/result/flux-security-*.rpm
-mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-core-*.src.rpm
-mock -r fedora-41-x86_64 --install /var/lib/mock/fedora-41-x86_64/result/flux-core-*.rpm
-mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-sched-*.src.rpm
-mock -r fedora-41-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-accounting-*.src.rpm
+mock -r fedora-43-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-security-*.src.rpm
+mock -r fedora-43-x86_64 --install /var/lib/mock/fedora-43-x86_64/result/flux-security-*.rpm
+mock -r fedora-43-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-core-*.src.rpm
+mock -r fedora-43-x86_64 --install /var/lib/mock/fedora-43-x86_64/result/flux-core-*.rpm
+mock -r fedora-43-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-sched-*.src.rpm
+mock -r fedora-43-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-accounting-*.src.rpm
 ```
 
 ## CI/CD
 
 **Build targets:**
-- **Fedora**: 42, 43, Rawhide
+- **Fedora**: 43, 44, Rawhide (rawhide builds are expected to fail until [luaposix supports Lua 5.5](https://github.com/luaposix/luaposix/issues/394))
 - **EPEL**: 9, 10 (CentOS Stream)
 
 **Automation:**
 - Daily checks for new upstream releases
 - Automatic PR creation when new versions are available
-- Spec file extraction from upstream SRPMs with Fedora adaptations applied
+- COPR rebuilds triggered automatically on merge to `main`
 
 ## Repository Structure
 
@@ -89,7 +89,8 @@ flux-rpm/
 │       ├── build-containers.yml
 │       ├── build-test.yml
 │       ├── check-updates.yml
-│       └── reusable-mock-build.yml
+│       ├── reusable-mock-build.yml
+│       └── trigger-copr.yml
 ├── flux-core/                   # Each package dir contains:
 ├── flux-security/               #   .spec, .rpmlintrc, sources,
 ├── flux-sched/                  #   and any patches
