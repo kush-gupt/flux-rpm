@@ -14,6 +14,7 @@ permissions:
   contents: write        # Push branches (create-pull-request)
   pull-requests: write   # Create PRs (create-pull-request)
   issues: write          # Create issues (create-issue-from-file)
+  actions: write         # Trigger build-test workflow on PR branch
 
 jobs:
   # ============================================================
@@ -64,6 +65,73 @@ jobs:
             echo "No update available (current: $current)"
           fi
 
+      - name: Generate changelog from upstream NEWS
+        if: steps.check.outputs.latest != ''
+        id: changelog
+        run: |
+          VERSION="${{ steps.check.outputs.latest }}"
+          PACKAGE="${{ matrix.package }}"
+
+          NEWS=$(curl -sf "https://raw.githubusercontent.com/flux-framework/${PACKAGE}/v${VERSION}/NEWS.md") || {
+            echo "::warning::Could not fetch NEWS.md, using minimal changelog"
+            echo "- Update to v${VERSION}" > /tmp/changelog_entries.txt
+            { echo "entries<<CHANGELOG_EOF"; cat /tmp/changelog_entries.txt; echo "CHANGELOG_EOF"; } >> $GITHUB_OUTPUT
+            exit 0
+          }
+
+          # Extract the section for this version (between consecutive version headers).
+          # Header format: "PACKAGE version X.Y.Z - DATE" followed by a line of dashes.
+          # Use awk for robustness across all flux-* projects.
+          ESCAPED_VER=$(echo "$VERSION" | sed 's/\./\\./g')
+          SECTION=$(echo "$NEWS" | awk "
+            /^${PACKAGE} version ${ESCAPED_VER}/ { found=1; next }
+            found && /^${PACKAGE} version [0-9]/ { exit }
+            found && /^---/ { next }
+            found { print }
+          ")
+
+          if [ -z "$SECTION" ]; then
+            echo "::warning::Could not extract NEWS section for ${VERSION}"
+            echo "- Update to v${VERSION}" > /tmp/changelog_entries.txt
+            { echo "entries<<CHANGELOG_EOF"; cat /tmp/changelog_entries.txt; echo "CHANGELOG_EOF"; } >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Extract feature headlines (handles ##, ###, #### and both
+          # "New Features" and "Features" section names)
+          FEATURES=$(echo "$SECTION" | awk '
+            /^#{2,4} (New )?Features/ { in_sect=1; next }
+            /^#{2,4} / { in_sect=0 }
+            in_sect && /^ {0,1}\* / { print }
+          ' | head -3 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//')
+
+          # Extract fix headlines (handles ##, ###, ####)
+          FIXES=$(echo "$SECTION" | awk '
+            /^#{2,4} Fixes/ { in_sect=1; next }
+            /^#{2,4} / { in_sect=0 }
+            in_sect && /^ {0,1}\* / { print }
+          ' | head -2 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//')
+
+          # Build changelog entries
+          {
+            echo "- Update to v${VERSION}"
+            if [ -n "$FEATURES" ]; then
+              echo "$FEATURES" | while IFS= read -r line; do
+                [ -n "$line" ] && echo "- $line"
+              done
+            fi
+            if [ -n "$FIXES" ]; then
+              echo "$FIXES" | while IFS= read -r line; do
+                [ -n "$line" ] && echo "- Fix: $line"
+              done
+            fi
+          } > /tmp/changelog_entries.txt
+
+          echo "Generated changelog entries:"
+          cat /tmp/changelog_entries.txt
+
+          { echo "entries<<CHANGELOG_EOF"; cat /tmp/changelog_entries.txt; echo "CHANGELOG_EOF"; } >> $GITHUB_OUTPUT
+
       - name: Update spec and sources
         if: steps.check.outputs.latest != ''
         run: |
@@ -80,7 +148,7 @@ jobs:
           {
             echo "%changelog"
             echo "* ${DATE} github-actions[bot] <github-actions[bot]@users.noreply.github.com> - ${VERSION}-1"
-            echo "- Update to v${VERSION}"
+            echo "${{ steps.changelog.outputs.entries }}"
             echo ""
             sed -n '/%changelog/,$ { /%changelog/d; p }' ${PACKAGE}/${PACKAGE}.spec
           } > /tmp/changelog
@@ -116,6 +184,7 @@ jobs:
           fi
 
       - name: Create Pull Request
+        id: create-pr
         if: steps.check.outputs.latest != ''
         uses: peter-evans/create-pull-request@v7
         with:
@@ -136,3 +205,12 @@ jobs:
             - [ ] Test build locally if possible
           branch: update-${{ matrix.package }}-${{ steps.check.outputs.latest }}
           delete-branch: true
+
+      - name: Trigger build CI on PR branch
+        if: steps.create-pr.outputs.pull-request-number
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="update-${{ matrix.package }}-${{ steps.check.outputs.latest }}"
+          echo "Triggering Build and Test RPMs on branch: $BRANCH"
+          gh workflow run build-test.yml --ref "$BRANCH"

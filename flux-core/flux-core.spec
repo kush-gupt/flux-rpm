@@ -1,12 +1,13 @@
 Name:    flux-core
-Version: 0.85.0
+Version: 0.86.0
 Release: 1%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 
-# Redhat only provides /usr/bin/false, but tests look for /bin/false
+# Prevent auto-Requires on /bin/false (cmd scripts use #!/bin/false shebangs;
+# RHEL provides /usr/bin/false)
 %global __requires_exclude /bin/false
 
 # LTO causes a bunch of tests to fail so it should not be used
@@ -274,6 +275,13 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Thu Jun 04 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.86.0-1
+- Update to v0.86.0
+- zeromq zerocopy for message parts >= 64kB
+- cmd scripts now have proper shebangs (upstream #7643)
+- namespace package extension via pkgutil (upstream #7633)
+- Fix: librlist overzealous GPU duplicate check when loading topology
+
 * Thu May 28 2026 Kush Gupta <kugupta@redhat.com> - 0.85.0-1
 - Update to v0.85.0
 - Bump jansson requirement to >= 2.11 (upstream #7554)
