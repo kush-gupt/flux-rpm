@@ -26,7 +26,7 @@ Patch1:  cmake-install-libdir-fix.patch
 
 ExcludeArch: ppc64le
 
-%global flux_core_minver 0.75.0
+%global flux_core_minver 0.78.0
 %global boost_minver     1.66
 %global pyyaml_minver    3.10
 
