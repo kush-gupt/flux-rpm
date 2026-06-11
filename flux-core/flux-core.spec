@@ -6,10 +6,6 @@ License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 
-# Prevent auto-Requires on /bin/false (cmd scripts use #!/bin/false shebangs;
-# RHEL provides /usr/bin/false)
-%global __requires_exclude /bin/false
-
 # LTO causes a bunch of tests to fail so it should not be used
 %global _lto_cflags %{nil}
 
@@ -17,11 +13,6 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 # known strict-aliasing violations. Upstream already uses -Wno-strict-aliasing
 # in their build but Fedora's optflags adds -O2 which enables -fstrict-aliasing.
 %global build_cflags %{build_cflags} -fno-strict-aliasing
-
-# Exclude flux Python subcommands from shebang mangling - these files are run
-# through the `flux python` wrapper and don't have shebangs by design. Without
-# this, brp-mangle-shebangs strips the executable bit we set, breaking `flux modprobe`.
-%global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/
 
 %global cffi_minver        1.1
 %global ply_minver         3.9
