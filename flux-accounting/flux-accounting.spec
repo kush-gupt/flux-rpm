@@ -1,5 +1,5 @@
 Name:    flux-accounting
-Version: 0.57.2
+Version: 0.58.0
 Release: 1%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
@@ -125,6 +125,13 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man1/*.1*
 
 %changelog
+* Mon Jun 15 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.58.0-1
+- Update to v0.58.0
+- : add  column, optional argument to filter for only
+- database: add new per-queue property for max resources in SCHED state
+- Fix: : add dynamic width sizing for columns
+- Fix: python: use  in bindings in place of raw value
+
 * Thu May 28 2026 Kush Gupta <kugupta@redhat.com> - 0.57.2-1
 - Update to v0.57.2
 - Align python3-devel requirement (>= 3.6) with flux-core and flux-sched
