@@ -1,5 +1,5 @@
 Name:    flux-sched
-Version: 0.51.0
+Version: 0.52.0
 Release: 1%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
@@ -150,6 +150,13 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
+* Mon Jun 15 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.52.0-1
+- Update to v0.52.0
+- reapi: add reapi_cli_match_with_jobid()
+- reapi: add reapi_cli_clone()
+- Fix: use constant strings where appropriate in some internal functions
+- Fix: fix more errno violations
+
 * Thu May 28 2026 Kush Gupta <kugupta@redhat.com> - 0.51.0-1
 - Update to v0.51.0
 - Bump jansson requirement to >= 2.11
