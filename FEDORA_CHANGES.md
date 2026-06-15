@@ -101,8 +101,8 @@ Each package has a `.rpmlintrc` file alongside its spec to suppress known false 
 
 - **LTO disabled**: `%global _lto_cflags %{nil}` -- LTO causes test failures
 - **Strict-aliasing disabled**: `%global build_cflags %{build_cflags} -fno-strict-aliasing` -- bundled libev has known violations
-- **Requires filter**: `%global __requires_exclude /bin/false` -- RHEL provides `/usr/bin/false` not `/bin/false`
-- **Shebang mangling exclusion**: `%global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/` -- flux Python subcommands run through `flux python` wrapper, not directly
+- **~~Requires filter~~**: ~~`%global __requires_exclude /bin/false`~~ -- removed; upstream no longer uses `#!/bin/false` shebangs (flux-core#7643)
+- **~~Shebang mangling exclusion~~**: ~~`%global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/`~~ -- removed; cmd scripts now have proper shebangs (flux-core#7643, flux-accounting#873)
 - **rpath removal**: Uses `chrpath -d` with improved error handling (`xargs -I{}` instead of deprecated `-ti`, `2>/dev/null || true`)
 - **Custom preun**: Stops `flux.service` gracefully before upgrade/removal, with `2>/dev/null` on systemctl check
 - **Lua paths**: Changed from hardcoded `5.3` to wildcard `*` for portability

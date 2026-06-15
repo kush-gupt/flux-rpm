@@ -6,11 +6,6 @@ License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-accounting
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 
-# Exclude flux Python subcommands from shebang mangling - these files are run
-# through the `flux python` wrapper and don't have shebangs by design. Without
-# this, brp-mangle-shebangs strips the executable bit we set, breaking `flux account`.
-%global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/
-
 %global flux_core_minver 0.81.0
 
 BuildRequires: pkgconfig(jansson) >= 2.10

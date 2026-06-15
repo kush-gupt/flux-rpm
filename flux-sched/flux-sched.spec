@@ -13,20 +13,12 @@ Patch0:  gcc15-ice-workaround.patch
 # GNUInstallDirs sets normal variable that shadows the CACHE FORCE override
 Patch1:  cmake-install-libdir-fix.patch
 
-# Redhat only provides /usr/bin/false, but tests look for /bin/false
-%global __requires_exclude /bin/false
-
-# Exclude flux Python subcommands from shebang mangling - these files are run
-# through the `flux python` wrapper and don't have shebangs by design. Without
-# this, brp-mangle-shebangs strips the executable bit, breaking `flux ion-resource`.
-%global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/
-
 # Can't use binary annotations for some reason:
 %undefine _annotated_build
 
 ExcludeArch: ppc64le
 
-%global flux_core_minver 0.75.0
+%global flux_core_minver 0.78.0
 %global boost_minver     1.66
 %global pyyaml_minver    3.10
 
