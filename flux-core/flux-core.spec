@@ -123,8 +123,6 @@ find %{buildroot} -name '*.la' -delete
 
 # Python subcommand permissions - flux requires .py files to be executable
 # (checked via access(path, R_OK|X_OK) in exec_subcommand_py)
-# These files are run through `flux python` wrapper, not directly, so they
-# don't have shebangs. We set them executable and exclude from shebang mangling.
 find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 find %{buildroot}%{_libexecdir}/flux/modprobe -name '*.py' -exec chmod 755 {} \;
 
