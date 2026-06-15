@@ -127,10 +127,10 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %changelog
 * Mon Jun 15 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.58.0-1
 - Update to v0.58.0
-- : add  column, optional argument to filter for only
+- view-bank: add active column, optional argument to filter for only active users
 - database: add new per-queue property for max resources in SCHED state
-- Fix: : add dynamic width sizing for columns
-- Fix: python: use  in bindings in place of raw value
+- Fix: view-job-records: add dynamic width sizing for columns
+- Fix: python: use INTEGER_MAX in bindings in place of raw value
 
 * Thu May 28 2026 Kush Gupta <kugupta@redhat.com> - 0.57.2-1
 - Update to v0.57.2

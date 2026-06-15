@@ -103,14 +103,14 @@ jobs:
             /^#{2,4} (New )?Features/ { in_sect=1; next }
             /^#{2,4} / { in_sect=0 }
             in_sect && /^ {0,1}\* / { print }
-          ' | head -3 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//')
+          ' | head -3 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//; s/`//g')
 
           # Extract fix headlines (handles ##, ###, ####)
           FIXES=$(echo "$SECTION" | awk '
             /^#{2,4} Fixes/ { in_sect=1; next }
             /^#{2,4} / { in_sect=0 }
             in_sect && /^ {0,1}\* / { print }
-          ' | head -2 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//')
+          ' | head -2 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//; s/`//g')
 
           # Build changelog entries
           {
@@ -148,7 +148,9 @@ jobs:
           {
             echo "%changelog"
             echo "* ${DATE} github-actions[bot] <github-actions[bot]@users.noreply.github.com> - ${VERSION}-1"
-            echo "${{ steps.changelog.outputs.entries }}"
+            cat <<'ENTRIES_EOF'
+          ${{ steps.changelog.outputs.entries }}
+          ENTRIES_EOF
             echo ""
             sed -n '/%changelog/,$ { /%changelog/d; p }' ${PACKAGE}/${PACKAGE}.spec
           } > /tmp/changelog
