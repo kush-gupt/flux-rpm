@@ -1,17 +1,14 @@
 Name:    flux-sched
 Version: 0.52.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-sched
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 
-# Work around GCC 15 internal compiler error (ICE) in scope_guard.hpp
-# GCC bug: https://gcc.gnu.org/bugzilla/
-Patch0:  gcc15-ice-workaround.patch
-# Fix CMake install LIBDIR on Fedora Rawhide (CMake 4.0+)
-# GNUInstallDirs sets normal variable that shadows the CACHE FORCE override
-Patch1:  cmake-install-libdir-fix.patch
+# Fix CMake install LIBDIR with CMake 4.0+ (Fedora 44+)
+# GNUInstallDirs normal variable shadows the CACHE FORCE override (CMP0126)
+Patch0:  cmake-install-libdir-fix.patch
 
 # Can't use binary annotations for some reason:
 %undefine _annotated_build
@@ -142,6 +139,9 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
+* Sun Jun 15 2026 Kush Gupta <kushalgupta@gmail.com> - 0.52.0-2
+- Drop gcc15-ice-workaround.patch (ICE fixed in GCC 15.2.1)
+
 * Mon Jun 15 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.52.0-1
 - Update to v0.52.0
 - reapi: add reapi_cli_match_with_jobid()
