@@ -1,5 +1,5 @@
 Name:    flux-core
-Version: 0.86.0
+Version: 0.87.0
 Release: 1%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
@@ -264,6 +264,17 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Fri Jul 10 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.87.0-1
+- Update to v0.87.0
+- content: add online garbage collection
+- shell: add new shell.tasks-complete callback and use it to disable exit-timeout
+- flux-restore: pipeline content store requests
+- job-manager: pipeline KVS lookups when reloading jobs on restart
+- add node topology aware scheduling
+- Fix: etc: update bash completions
+- Fix: sdexec: reap orphan sdproc transient unit on post-start check failure
+- Fix: zlistx_sort() sorting bug
+
 * Thu Jun 04 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.86.0-1
 - Update to v0.86.0
 - zeromq zerocopy for message parts >= 64kB

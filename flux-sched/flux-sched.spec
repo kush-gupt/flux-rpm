@@ -139,7 +139,7 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
-* Sun Jun 15 2026 Kush Gupta <kushalgupta@gmail.com> - 0.52.0-2
+* Mon Jun 15 2026 Kush Gupta <kushalgupta@gmail.com> - 0.52.0-2
 - Drop gcc15-ice-workaround.patch (ICE fixed in GCC 15.2.1)
 
 * Mon Jun 15 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.52.0-1

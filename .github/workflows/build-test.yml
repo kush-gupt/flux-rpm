@@ -59,7 +59,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Install rpmlint with config files
         run: |
-          dnf install -y rpmlint
+          dnf install -y rpmlint glibc-langpack-en
           
           # Copy rpmlintrc files to expected location
           mkdir -p ~/.config/rpmlint
@@ -96,7 +96,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Install rpmspec
-        run: dnf install -y rpm-build
+        run: dnf install -y rpm-build glibc-langpack-en
       
       - name: Validate spec file syntax
         run: |
