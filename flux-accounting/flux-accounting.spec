@@ -1,5 +1,5 @@
 Name:    flux-accounting
-Version: 0.58.0
+Version: 0.59.0
 Release: 1%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
@@ -120,6 +120,16 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man1/*.1*
 
 %changelog
+* Fri Jul 10 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.59.0-1
+- Update to v0.59.0
+- add bindings, commands for interacting with config_table
+- database: add new table to store job usage factors
+- job usage: use new table for usage calculation, decay
+- job usage: add reconfiguration support
+- edit-user: add incremental queue management to command
+- Fix: user_subcommands: don't catch and re-raise ValueError for
+  validate_queue(), validate_project()
+
 * Mon Jun 15 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.58.0-1
 - Update to v0.58.0
 - view-bank: add active column, optional argument to filter for only active users

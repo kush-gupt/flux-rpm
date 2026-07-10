@@ -98,19 +98,41 @@ jobs:
           fi
 
           # Extract feature headlines (handles ##, ###, #### and both
-          # "New Features" and "Features" section names)
+          # "New Features" and "Features" section names).
+          # Join continuation lines (non-bullet lines following a bullet)
+          # so multi-line entries are not truncated.
           FEATURES=$(echo "$SECTION" | awk '
             /^#{2,4} (New )?Features/ { in_sect=1; next }
-            /^#{2,4} / { in_sect=0 }
-            in_sect && /^ {0,1}\* / { print }
-          ' | head -3 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//; s/`//g')
+            /^#{2,4} / { if (buf) { print buf; buf="" }; in_sect=0 }
+            in_sect && /^ {0,1}\* / {
+              if (buf) print buf
+              buf = $0
+              next
+            }
+            in_sect && buf && /[^ ]/ && !/^ {0,1}\* / {
+              sub(/^[[:space:]]+/, "")
+              buf = buf " " $0
+              next
+            }
+            END { if (buf) print buf }
+          ' | head -5 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//; s/`//g')
 
           # Extract fix headlines (handles ##, ###, ####)
           FIXES=$(echo "$SECTION" | awk '
             /^#{2,4} Fixes/ { in_sect=1; next }
-            /^#{2,4} / { in_sect=0 }
-            in_sect && /^ {0,1}\* / { print }
-          ' | head -2 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//; s/`//g')
+            /^#{2,4} / { if (buf) { print buf; buf="" }; in_sect=0 }
+            in_sect && /^ {0,1}\* / {
+              if (buf) print buf
+              buf = $0
+              next
+            }
+            in_sect && buf && /[^ ]/ && !/^ {0,1}\* / {
+              sub(/^[[:space:]]+/, "")
+              buf = buf " " $0
+              next
+            }
+            END { if (buf) print buf }
+          ' | head -3 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//; s/`//g')
 
           # Build changelog entries
           {
