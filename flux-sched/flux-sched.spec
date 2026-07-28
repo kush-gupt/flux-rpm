@@ -85,6 +85,10 @@ export PYTHON=/usr/bin/python3
 
 %cmake_build
 
+# Man pages are no longer built by default since 0.53.0 (the docs
+# target lost its ALL attribute upstream); build them explicitly.
+%cmake_build --target manpages
+
 %check
 # Tests cannot run in mock/koji build environments because:
 #   - t0000-sharness.t (sharness framework self-test) fails due to output
@@ -146,6 +150,7 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 - Fix: reader/jgf: vertex equality should ignore properties
 - Fix: pass json_t objects instead of json strings for allocate_with_satisfiability
 - Drop cmake-install-libdir-fix.patch (applied upstream in 0.53.0)
+- Build manpages target explicitly (docs target no longer built by default)
 
 * Mon Jun 15 2026 Kush Gupta <kushalgupta@gmail.com> - 0.52.0-2
 - Drop gcc15-ice-workaround.patch (ICE fixed in GCC 15.2.1)
