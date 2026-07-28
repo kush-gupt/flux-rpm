@@ -6,10 +6,6 @@ License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-sched
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 
-# Fix CMake install LIBDIR with CMake 4.0+ (Fedora 44+)
-# GNUInstallDirs normal variable shadows the CACHE FORCE override (CMP0126)
-Patch0:  cmake-install-libdir-fix.patch
-
 # Can't use binary annotations for some reason:
 %undefine _annotated_build
 
@@ -149,6 +145,7 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 - Fix: dfu: prevent prune errno from overtaking traversal
 - Fix: reader/jgf: vertex equality should ignore properties
 - Fix: pass json_t objects instead of json strings for allocate_with_satisfiability
+- Drop cmake-install-libdir-fix.patch (applied upstream in 0.53.0)
 
 * Mon Jun 15 2026 Kush Gupta <kushalgupta@gmail.com> - 0.52.0-2
 - Drop gcc15-ice-workaround.patch (ICE fixed in GCC 15.2.1)
