@@ -1,14 +1,10 @@
 Name:    flux-sched
-Version: 0.52.0
-Release: 2%{?dist}
+Version: 0.53.0
+Release: 1%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-sched
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
-
-# Fix CMake install LIBDIR with CMake 4.0+ (Fedora 44+)
-# GNUInstallDirs normal variable shadows the CACHE FORCE override (CMP0126)
-Patch0:  cmake-install-libdir-fix.patch
 
 # Can't use binary annotations for some reason:
 %undefine _annotated_build
@@ -89,6 +85,10 @@ export PYTHON=/usr/bin/python3
 
 %cmake_build
 
+# Man pages are no longer built by default since 0.53.0 (the docs
+# target lost its ALL attribute upstream); build them explicitly.
+%cmake_build --target manpages
+
 %check
 # Tests cannot run in mock/koji build environments because:
 #   - t0000-sharness.t (sharness framework self-test) fails due to output
@@ -139,6 +139,19 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
+* Tue Jul 28 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.53.0-1
+- Update to v0.53.0
+- reapi: add add_subgraph and remove_subgraph functionality
+- reapi: add optional match format parameter to cli find() and add C bindings
+- reapi: implement update_allocate()
+- reapi: add support for partial cancel with rv1exec match format
+- reapi: add resource status get/set API
+- Fix: dfu: prevent prune errno from overtaking traversal
+- Fix: reader/jgf: vertex equality should ignore properties
+- Fix: pass json_t objects instead of json strings for allocate_with_satisfiability
+- Drop cmake-install-libdir-fix.patch (applied upstream in 0.53.0)
+- Build manpages target explicitly (docs target no longer built by default)
+
 * Mon Jun 15 2026 Kush Gupta <kushalgupta@gmail.com> - 0.52.0-2
 - Drop gcc15-ice-workaround.patch (ICE fixed in GCC 15.2.1)
 
