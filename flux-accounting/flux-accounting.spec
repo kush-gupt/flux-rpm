@@ -1,5 +1,5 @@
 Name:    flux-accounting
-Version: 0.59.0
+Version: 0.59.1
 Release: 1%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
@@ -120,6 +120,13 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man1/*.1*
 
 %changelog
+* Tue Jul 28 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.59.1-1
+- Update to v0.59.1
+- add new bank-info command for viewing normalized shares, usage on a cluster
+- JobRecord: add ncores, ngpus properties
+- job usage: extend usage calculation to consider cores, GPUs
+- Fix: update-db: miscellaneous fixes to improve migration to new job usage table
+
 * Fri Jul 10 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.59.0-1
 - Update to v0.59.0
 - add bindings, commands for interacting with config_table
