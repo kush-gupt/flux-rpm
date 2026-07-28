@@ -159,12 +159,47 @@ jobs:
         run: |
           VERSION="${{ steps.check.outputs.latest }}"
           PACKAGE="${{ matrix.package }}"
+          SPEC="${PACKAGE}/${PACKAGE}.spec"
 
-          sed -i "s/^Version:.*/Version: ${VERSION}/" ${PACKAGE}/${PACKAGE}.spec
-          sed -i 's/^Release:.*/Release: 1%{?dist}/' ${PACKAGE}/${PACKAGE}.spec
+          sed -i "s/^Version:.*/Version: ${VERSION}/" "$SPEC"
+          sed -i 's/^Release:.*/Release: 1%{?dist}/' "$SPEC"
 
-          SHA256=$(curl -sL "https://github.com/flux-framework/${PACKAGE}/releases/download/v${VERSION}/${PACKAGE}-${VERSION}.tar.gz" | sha256sum | awk '{print $1}')
+          TARBALL="/tmp/${PACKAGE}-${VERSION}.tar.gz"
+          curl -sfL -o "$TARBALL" "https://github.com/flux-framework/${PACKAGE}/releases/download/v${VERSION}/${PACKAGE}-${VERSION}.tar.gz" || {
+            echo "::error::Failed to download release tarball for ${PACKAGE} ${VERSION}"
+            exit 1
+          }
+          SHA256=$(sha256sum "$TARBALL" | awk '{print $1}')
           echo "SHA256 (${PACKAGE}-${VERSION}.tar.gz) = ${SHA256}" > ${PACKAGE}/sources
+
+          # Check each patch against the new release. A patch that
+          # reverse-applies cleanly has been merged upstream and would
+          # break %prep ("Reversed (or previously applied) patch
+          # detected!"), so drop it (spec entry, preceding comment
+          # block, and patch file) and record a changelog note.
+          # Patches that no longer apply at all are left in place and
+          # flagged for manual review.
+          SRCDIR=$(mktemp -d)
+          tar -xzf "$TARBALL" -C "$SRCDIR"
+          : > /tmp/dropped_patches.txt
+          grep -E '^Patch[0-9]*:' "$SPEC" | awk '{print $2}' | while IFS= read -r patchfile; do
+            # --fuzz=0 matches how rpmbuild %autosetup applies patches
+            if patch -p1 -d "${SRCDIR}/${PACKAGE}-${VERSION}" --dry-run --fuzz=0 -N -s -f < "${PACKAGE}/${patchfile}" >/dev/null 2>&1; then
+              echo "Patch still applies cleanly, keeping: ${patchfile}"
+            elif patch -p1 -R -d "${SRCDIR}/${PACKAGE}-${VERSION}" --dry-run --fuzz=0 -s -f < "${PACKAGE}/${patchfile}" >/dev/null 2>&1; then
+              echo "Patch already applied upstream, dropping: ${patchfile}"
+              awk -v patchfile="$patchfile" '
+                /^[[:space:]]*$/ || /^#/ { buf = buf $0 ORS; next }
+                /^Patch[0-9]*:/ && $2 == patchfile { buf = ""; next }
+                { printf "%s", buf; buf = ""; print }
+                END { printf "%s", buf }
+              ' "$SPEC" > "${SPEC}.tmp" && mv "${SPEC}.tmp" "$SPEC"
+              rm -f "${PACKAGE}/${patchfile}"
+              echo "- Drop ${patchfile} (applied upstream in ${VERSION})" >> /tmp/dropped_patches.txt
+            else
+              echo "::warning::Patch ${patchfile} does not apply cleanly to ${PACKAGE} ${VERSION}; manual review needed"
+            fi
+          done
 
           DATE=$(date -u '+%a %b %d %Y')
           {
@@ -173,11 +208,12 @@ jobs:
             cat <<'ENTRIES_EOF'
           ${{ steps.changelog.outputs.entries }}
           ENTRIES_EOF
+            cat /tmp/dropped_patches.txt
             echo ""
-            sed -n '/%changelog/,$ { /%changelog/d; p }' ${PACKAGE}/${PACKAGE}.spec
+            sed -n '/%changelog/,$ { /%changelog/d; p }' "$SPEC"
           } > /tmp/changelog
-          sed -i '/%changelog/,$ d' ${PACKAGE}/${PACKAGE}.spec
-          cat /tmp/changelog >> ${PACKAGE}/${PACKAGE}.spec
+          sed -i '/%changelog/,$ d' "$SPEC"
+          cat /tmp/changelog >> "$SPEC"
 
       - name: Find or create tracking issue
         id: create-issue
