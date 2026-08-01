@@ -1,6 +1,6 @@
 Name:    flux-sched
 Version: 0.53.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-sched
@@ -112,9 +112,11 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %license LICENSE
 %doc README.md NEWS.md
 
-# rc1,3 files for fluxion
-%config(noreplace) %{_sysconfdir}/flux/rc1.d/01-sched-fluxion
-%config(noreplace) %{_sysconfdir}/flux/rc3.d/01-sched-fluxion
+# rc1,3 hooks for fluxion: executable scripts, so intentionally not %%config
+# (rpmlint executable-marked-as-config-file; stale local edits would break
+# module loading on upgrade)
+%{_sysconfdir}/flux/rc1.d/01-sched-fluxion
+%{_sysconfdir}/flux/rc3.d/01-sched-fluxion
 %config(noreplace) %{_sysconfdir}/flux/modprobe/modprobe.d/fluxion.toml
 %{_sysconfdir}/flux/modprobe/rc1.d/fluxion.py
 %{_libdir}/flux/modules/sched-fluxion-qmanager.so
@@ -139,6 +141,10 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
+* Sat Aug 01 2026 Cursor Agent <cursoragent@cursor.com> - 0.53.0-2
+- Install rc1.d/rc3.d fluxion hooks as regular files instead of %%config
+  (executable scripts must not be config files)
+
 * Tue Jul 28 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.53.0-1
 - Update to v0.53.0
 - reapi: add add_subgraph and remove_subgraph functionality
