@@ -31,7 +31,7 @@ jobs:
     name: Spelling check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Check Spelling
         uses: crate-ci/typos@v1.28.4
         with:
@@ -41,7 +41,7 @@ jobs:
     name: Shellcheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Run shellcheck on scripts
         uses: ludeeus/action-shellcheck@2.0.0
         with:
@@ -55,7 +55,7 @@ jobs:
     container:
       image: fedora:latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Install rpmlint
         run: dnf install -y rpmlint glibc-langpack-en
 
@@ -89,7 +89,7 @@ jobs:
     container:
       image: fedora:latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Install rpmspec
         run: dnf install -y rpm-build glibc-langpack-en
 
@@ -155,7 +155,7 @@ jobs:
     container:
       image: ${{ needs.check-container.outputs.image }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # Exact key on the sources files, deliberately without
       # restore-keys: build-srpm.sh hard-fails on checksum mismatch, so
@@ -225,7 +225,7 @@ jobs:
       options: --privileged
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Download SRPMs
         uses: actions/download-artifact@v7
