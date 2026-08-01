@@ -18,23 +18,24 @@ srpm:
 	mkdir -p ~/rpmbuild/{SOURCES,SPECS}
 	
 	# Download the source tarball
-	@if [ "$(PKGNAME)" = "flux-security" ]; then \
-		echo "Downloading flux-security source..."; \
-		curl -L -o ~/rpmbuild/SOURCES/$(PKGNAME)-$(VERSION).tar.gz \
-			https://github.com/flux-framework/flux-security/releases/download/v$(VERSION)/$(PKGNAME)-$(VERSION).tar.gz; \
-	elif [ "$(PKGNAME)" = "flux-core" ]; then \
-		echo "Downloading flux-core source..."; \
-		curl -L -o ~/rpmbuild/SOURCES/$(PKGNAME)-$(VERSION).tar.gz \
-			https://github.com/flux-framework/flux-core/releases/download/v$(VERSION)/$(PKGNAME)-$(VERSION).tar.gz; \
-	elif [ "$(PKGNAME)" = "flux-sched" ]; then \
-		echo "Downloading flux-sched source..."; \
-		curl -L -o ~/rpmbuild/SOURCES/$(PKGNAME)-$(VERSION).tar.gz \
-			https://github.com/flux-framework/flux-sched/releases/download/v$(VERSION)/$(PKGNAME)-$(VERSION).tar.gz; \
-	elif [ "$(PKGNAME)" = "flux-accounting" ]; then \
-		echo "Downloading flux-accounting source..."; \
-		curl -L -o ~/rpmbuild/SOURCES/$(PKGNAME)-$(VERSION).tar.gz \
-			https://github.com/flux-framework/flux-accounting/releases/download/v$(VERSION)/$(PKGNAME)-$(VERSION).tar.gz; \
-	fi
+	@echo "Downloading $(PKGNAME) source..."
+	curl -fL -o ~/rpmbuild/SOURCES/$(PKGNAME)-$(VERSION).tar.gz \
+		https://github.com/flux-framework/$(PKGNAME)/releases/download/v$(VERSION)/$(PKGNAME)-$(VERSION).tar.gz
+	
+	# Verify tarball checksum against the sources file
+	@expected=$$(grep -F "($(PKGNAME)-$(VERSION).tar.gz)" $(SPEC_DIR)sources | awk '{print $$4}'); \
+	if [ -z "$$expected" ]; then \
+		echo "ERROR: no SHA256 entry for $(PKGNAME)-$(VERSION).tar.gz in $(SPEC_DIR)sources"; \
+		exit 1; \
+	fi; \
+	actual=$$(sha256sum ~/rpmbuild/SOURCES/$(PKGNAME)-$(VERSION).tar.gz | awk '{print $$1}'); \
+	if [ "$$actual" != "$$expected" ]; then \
+		echo "ERROR: SHA256 mismatch for $(PKGNAME)-$(VERSION).tar.gz"; \
+		echo "  expected: $$expected"; \
+		echo "  actual:   $$actual"; \
+		exit 1; \
+	fi; \
+	echo "SHA256 verified for $(PKGNAME)-$(VERSION).tar.gz"
 	
 	# Copy spec file
 	cp $(spec) ~/rpmbuild/SPECS/
