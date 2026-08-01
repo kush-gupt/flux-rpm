@@ -75,6 +75,7 @@ Source tarballs are verified against the SHA256 checksum in each package's `sour
 - Daily checks for new upstream releases
 - Automatic PR creation when new versions are available
 - COPR rebuilds triggered automatically on merge to `main`
+- Mock chroot/package caches and ccache persist across CI runs via GitHub Actions cache, so repeat builds skip most chroot setup, package downloads, and compilation
 
 ## Repository Structure
 
