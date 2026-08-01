@@ -218,6 +218,59 @@ jobs:
       - name: List SRPMs
         run: ls -la ./srpms/
 
+      # ============================================================
+      # Persistent caches (free-tier actions/cache, 10 GB repo budget):
+      # - mock root/package caches: one immutable entry per distro per
+      #   week (exact key hit -> no re-upload), cuts chroot init and
+      #   builddep download time
+      # - ccache: fresh entry per run with prefix restore, cuts C/C++
+      #   compile time on repeat builds
+      # ============================================================
+      - name: Install zstd for fast cache compression
+        run: command -v zstd >/dev/null 2>&1 || dnf install -y zstd
+
+      - name: Compute cache week key
+        id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore mock root and package caches
+        uses: actions/cache@v6
+        with:
+          path: |
+            /var/cache/mock/${{ matrix.mock-release }}/root_cache
+            /var/cache/mock/${{ matrix.mock-release }}/dnf_cache
+          key: mock-${{ matrix.mock-release }}-${{ steps.week.outputs.week }}
+          restore-keys: |
+            mock-${{ matrix.mock-release }}-
+
+      - name: Restore compiler cache (ccache)
+        uses: actions/cache@v6
+        with:
+          path: /var/cache/mock/${{ matrix.mock-release }}/ccache
+          key: ccache-${{ matrix.mock-release }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ matrix.mock-release }}-
+
+      - name: Configure mock caching
+        run: |
+          # Enable mock's ccache plugin (persisted across runs above).
+          # root_cache/dnf_cache are enabled by default; we only persist
+          # them. Ensure the cached paths exist so the post-job cache
+          # save never fails on a missing directory.
+          mkdir -p "/var/cache/mock/${{ matrix.mock-release }}/root_cache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}/dnf_cache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}/ccache"
+
+          cat >> /etc/mock/site-defaults.cfg <<'EOF'
+          config_opts['plugin_conf']['ccache_enable'] = True
+          config_opts['plugin_conf']['ccache_opts']['max_cache_size'] = '1G'
+          EOF
+
+          # Keep the config file's mtime older than any restored root
+          # cache so mock never considers the cache stale because this
+          # file was just (re)written.
+          touch -d '2020-01-01 00:00:00' /etc/mock/site-defaults.cfg
+
       - name: Initialize mock
         run: mock -r ${{ matrix.mock-release }} --init
 
@@ -396,8 +449,17 @@ jobs:
                 echo "No packages"
               fi
             done
+            echo ""
+            echo "=== Cache sizes ==="
+            du -sh "/var/cache/mock/${{ matrix.mock-release }}/ccache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}/root_cache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}/dnf_cache" \
+                   2>/dev/null || echo "no caches"
           } | tee build-summary.txt
 
+      # debuginfo/debugsource RPMs are excluded: they dominate artifact
+      # size, and the smoke tests only install the binary RPMs. Rebuild
+      # locally if debuginfo is ever needed.
       - name: Upload all build results
         uses: actions/upload-artifact@v6
         if: always()
@@ -410,6 +472,8 @@ jobs:
             results-accounting/
             *-build.log
             build-summary.txt
+            !results-*/*-debuginfo-*.rpm
+            !results-*/*-debugsource-*.rpm
 
       - name: Cleanup mock
         if: always()
