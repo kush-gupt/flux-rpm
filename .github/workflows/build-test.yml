@@ -146,17 +146,25 @@ jobs:
             echo "image=fedora:latest" >> "$GITHUB_OUTPUT"
           fi
 
-  # Build SRPMs (no lint dependency for faster startup)
+  # Build SRPMs (uses the prebuilt builder image when available so the
+  # tool install is a no-op; lint jobs are intentionally not dependencies)
   build-srpms:
     name: Build SRPMs
     runs-on: ubuntu-latest
+    needs: [check-container]
     container:
-      image: fedora:latest
+      image: ${{ needs.check-container.outputs.image }}
     steps:
       - uses: actions/checkout@v5
       - name: Build all SRPMs
         run: |
-          dnf install -y rpm-build rpmdevtools wget
+          # Builder image ships these already; the fedora:latest
+          # fallback container installs them here.
+          if ! command -v rpmbuild >/dev/null 2>&1 || \
+             ! command -v rpmdev-setuptree >/dev/null 2>&1 || \
+             ! command -v wget >/dev/null 2>&1; then
+            dnf install -y rpm-build rpmdevtools wget
+          fi
 
           # build-srpm.sh downloads the release tarballs, verifies their
           # SHA256 against flux-*/sources, and builds all four SRPMs into
@@ -226,8 +234,13 @@ jobs:
       # - ccache: fresh entry per run with prefix restore, cuts C/C++
       #   compile time on repeat builds
       # ============================================================
-      - name: Install zstd for fast cache compression
-        run: command -v zstd >/dev/null 2>&1 || dnf install -y zstd
+      - name: Install cache and speed tooling
+        run: |
+          # zstd: fast actions/cache compression
+          # nosync: mock preloads it to skip fsync during chroot package
+          # installs (safe in throwaway CI chroots)
+          command -v zstd >/dev/null 2>&1 || dnf install -y zstd
+          rpm -q nosync >/dev/null 2>&1 || dnf install -y nosync
 
       - name: Compute cache week key
         id: week
@@ -264,6 +277,7 @@ jobs:
           cat >> /etc/mock/site-defaults.cfg <<'EOF'
           config_opts['plugin_conf']['ccache_enable'] = True
           config_opts['plugin_conf']['ccache_opts']['max_cache_size'] = '1G'
+          config_opts['nosync'] = True
           EOF
 
           # Keep the config file's mtime older than any restored root

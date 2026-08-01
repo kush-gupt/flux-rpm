@@ -27,6 +27,8 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     git \
     # Fast compression for actions/cache save/restore
     zstd \
+    # fsync elimination for mock chroot package installs
+    nosync \
     && dnf clean all \
     && rm -rf /var/cache/dnf
 
