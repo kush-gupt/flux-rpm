@@ -63,6 +63,8 @@ mock -r fedora-43-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-sched-*.src.rpm
 mock -r fedora-43-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-accounting-*.src.rpm
 ```
 
+Source tarballs are verified against the SHA256 checksum in each package's `sources` file during SRPM builds.
+
 ## CI/CD
 
 **Build targets:**
@@ -81,16 +83,14 @@ flux-rpm/
 ├── .copr/
 │   └── Makefile                 # COPR SCM build script
 ├── .github/
-│   ├── actions/
-│   │   └── test-packages/       # Reusable test action
 │   ├── containers/
 │   │   └── Dockerfile.builder   # Build container image
-│   └── workflows/
-│       ├── build-containers.yml
-│       ├── build-test.yml
-│       ├── check-updates.yml
-│       ├── reusable-mock-build.yml
-│       └── trigger-copr.yml
+│   ├── workflows/
+│   │   ├── build-containers.yml
+│   │   ├── build-test.yml
+│   │   ├── check-updates.yml
+│   │   └── trigger-copr.yml
+│   └── dependabot.yml
 ├── flux-core/                   # Each package dir contains:
 ├── flux-security/               #   .spec, .rpmlintrc, sources,
 ├── flux-sched/                  #   and any patches

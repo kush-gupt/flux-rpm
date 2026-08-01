@@ -6,12 +6,14 @@ This document describes changes made to the upstream LLNL/TOSS spec files for Fe
 
 Upstream SRPMs used as comparison baseline (from GitHub release assets):
 
-| Package | Upstream SRPM | Fedora Version |
-|---------|---------------|----------------|
-| flux-core | `flux-core-0.81.0-1.t4.src.rpm` (v0.81.0) | 0.85.0 |
-| flux-security | `flux-security-0.14.0-1.t4.src.rpm` (v0.14.0) | 0.15.0 |
-| flux-sched | `flux-sched-0.47.0-1.t4.src.rpm` (v0.47.0) | 0.52.0 |
-| flux-accounting | `flux-accounting-0.51.0-1.t4.src.rpm` (v0.51.0) | 0.57.2 |
+| Package | Upstream SRPM |
+|---------|---------------|
+| flux-core | `flux-core-0.81.0-1.t4.src.rpm` (v0.81.0) |
+| flux-security | `flux-security-0.14.0-1.t4.src.rpm` (v0.14.0) |
+| flux-sched | `flux-sched-0.47.0-1.t4.src.rpm` (v0.47.0) |
+| flux-accounting | `flux-accounting-0.51.0-1.t4.src.rpm` (v0.51.0) |
+
+The currently packaged version of each component is the `Version:` field in its spec file (`flux-*/<pkg>.spec`), which is the source of truth and is bumped automatically by the check-updates workflow.
 
 ## Common Changes
 
@@ -117,7 +119,7 @@ Each package has a `.rpmlintrc` file alongside its spec to suppress known false 
 
 ### flux-sched
 
-- **Patches**: `cmake-install-libdir-fix.patch` (CMake 4.0+ GNUInstallDirs conflict; `set(CACHE FORCE)` no longer removes a same-named normal variable under policy CMP0126 NEW)
+- **Dropped patch**: `cmake-install-libdir-fix.patch` (CMake 4.0+ GNUInstallDirs conflict; `set(CACHE FORCE)` no longer removes a same-named normal variable under policy CMP0126 NEW) was carried from v0.49.0; applied upstream and dropped in v0.53.0
 - **Dropped patch**: `gcc15-ice-workaround.patch` (GCC 15 ICE in `scope_guard.hpp`) was carried for v0.48.0; the ICE was fixed in GCC 15.2.1 and the patch dropped in v0.52.0
 - **Architecture exclusion** (retained from upstream): `ExcludeArch: ppc64le`
 - **Build annotation** (retained from upstream): `%undefine _annotated_build` (binary annotations cause build failures)

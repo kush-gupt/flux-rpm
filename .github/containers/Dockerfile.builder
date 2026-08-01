@@ -6,9 +6,9 @@
 
 FROM fedora:latest
 
-LABEL org.opencontainers.image.source="https://github.com/flux-framework/flux-rpm"
+LABEL org.opencontainers.image.source="https://github.com/kush-gupt/flux-rpm"
 LABEL org.opencontainers.image.description="Flux RPM build environment with pre-installed dependencies"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="LGPL-3.0-only"
 
 # Install all build dependencies in a single layer
 RUN dnf install -y --setopt=install_weak_deps=False \
