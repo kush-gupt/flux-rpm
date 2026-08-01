@@ -228,7 +228,7 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Download SRPMs
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: srpms
           path: ./srpms
@@ -569,7 +569,7 @@ jobs:
 
     steps:
       - name: Download RPMs
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: rpms-${{ matrix.short-name }}
           path: ./rpms
