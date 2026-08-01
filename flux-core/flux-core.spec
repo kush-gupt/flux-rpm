@@ -1,6 +1,6 @@
 Name:    flux-core
 Version: 0.87.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
@@ -144,6 +144,8 @@ mkdir -p -m 0755 %{buildroot}%{_sysconfdir}/flux/rc1.d
 
 %post
 %systemd_post flux.service
+# Create tmpfiles (e.g. /run/flux) at install time instead of next boot
+%tmpfiles_create %{_tmpfilesdir}/flux.conf
 
 %preun
 # Stop the flux service on both removal and upgrade if active
@@ -264,6 +266,10 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Sat Aug 01 2026 Cursor Agent <cursoragent@cursor.com> - 0.87.0-2
+- Run systemd-tmpfiles --create for flux.conf in %%post so runtime
+  directories exist at install time instead of after the next boot
+
 * Fri Jul 10 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.87.0-1
 - Update to v0.87.0
 - content: add online garbage collection

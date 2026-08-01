@@ -63,6 +63,8 @@ mock -r fedora-43-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-sched-*.src.rpm
 mock -r fedora-43-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-accounting-*.src.rpm
 ```
 
+Source tarballs are verified against the SHA256 checksum in each package's `sources` file during SRPM builds.
+
 ## CI/CD
 
 **Build targets:**
@@ -73,6 +75,7 @@ mock -r fedora-43-x86_64 --rebuild ~/rpmbuild/SRPMS/flux-accounting-*.src.rpm
 - Daily checks for new upstream releases
 - Automatic PR creation when new versions are available
 - COPR rebuilds triggered automatically on merge to `main`
+- Mock chroot/package caches and ccache persist across CI runs via GitHub Actions cache, so repeat builds skip most chroot setup, package downloads, and compilation (on EL9, cmake builds route the gcc-toolset compiler through ccache via `CMAKE_*_COMPILER_LAUNCHER`); smoke tests likewise reuse a cached dnf package cache
 
 ## Repository Structure
 
@@ -81,16 +84,14 @@ flux-rpm/
 ├── .copr/
 │   └── Makefile                 # COPR SCM build script
 ├── .github/
-│   ├── actions/
-│   │   └── test-packages/       # Reusable test action
 │   ├── containers/
 │   │   └── Dockerfile.builder   # Build container image
-│   └── workflows/
-│       ├── build-containers.yml
-│       ├── build-test.yml
-│       ├── check-updates.yml
-│       ├── reusable-mock-build.yml
-│       └── trigger-copr.yml
+│   ├── workflows/
+│   │   ├── build-containers.yml
+│   │   ├── build-test.yml
+│   │   ├── check-updates.yml
+│   │   └── trigger-copr.yml
+│   └── dependabot.yml
 ├── flux-core/                   # Each package dir contains:
 ├── flux-security/               #   .spec, .rpmlintrc, sources,
 ├── flux-sched/                  #   and any patches

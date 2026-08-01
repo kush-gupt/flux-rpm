@@ -32,7 +32,7 @@ jobs:
           fi
 
       - name: Install copr-cli
-        run: pip install copr-cli
+        run: pip install copr-cli==2.5
 
       - name: Configure copr-cli
         run: |

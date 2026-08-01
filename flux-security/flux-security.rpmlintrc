@@ -9,3 +9,7 @@
 setBadness('unused-rpmlintrc-filter', 0)
 addFilter("setuid-binary.*/usr/libexec/flux/flux-imp")
 addFilter("non-standard-executable-perm.*/usr/libexec/flux/flux-imp")
+
+# Upstream version.h carries an outdated FSF postal address in its license
+# header; cosmetic upstream issue, not fixable from the packaging side.
+addFilter("incorrect-fsf-address.*/usr/include/flux/security/version[.]h")

@@ -9,10 +9,9 @@ on:
       - 'flux-*/*.spec'
       - 'flux-*/sources'
       - 'flux-*/*.patch'
+      - 'scripts/**'
       - '.copr/**'
       - '.github/workflows/build-test.yml'
-      - '.github/workflows/reusable-mock-build.yml'
-      - '.github/actions/**'
       - '.github/containers/**'
   workflow_dispatch:
 
@@ -44,9 +43,9 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Run shellcheck on scripts
-        uses: ludeeus/action-shellcheck@master
+        uses: ludeeus/action-shellcheck@2.0.0
         with:
-          scandir: '.github'
+          scandir: '.'
           ignore_paths: ''
           severity: warning
 
@@ -57,36 +56,32 @@ jobs:
       image: fedora:latest
     steps:
       - uses: actions/checkout@v5
-      - name: Install rpmlint with config files
-        run: |
-          dnf install -y rpmlint glibc-langpack-en
-          
-          # Copy rpmlintrc files to expected location
-          mkdir -p ~/.config/rpmlint
-          for pkg in flux-security flux-core flux-sched flux-accounting; do
-            if [ -f "$pkg/$pkg.rpmlintrc" ]; then
-              cp "$pkg/$pkg.rpmlintrc" ~/.config/rpmlint/
-            fi
-          done
-      
+      - name: Install rpmlint
+        run: dnf install -y rpmlint glibc-langpack-en
+
       - name: Run rpmlint on all spec files
         run: |
-          # Note: rpmlintrc filters are only applied when checking built RPMs,
-          # not spec files. We allow warnings here and do strict checking on
-          # built packages in the build job.
-          echo "=== Linting flux-security.spec ===" 
-          rpmlint flux-security/flux-security.spec || true
-          
-          echo "=== Linting flux-core.spec ===" 
-          rpmlint flux-core/flux-core.spec || true
-          
-          echo "=== Linting flux-sched.spec ===" 
-          rpmlint flux-sched/flux-sched.spec || true
-          
-          echo "=== Linting flux-accounting.spec ===" 
-          rpmlint flux-accounting/flux-accounting.spec || true
-          
-          echo "=== All spec files linted (warnings allowed) ==="
+          # rpmlint 2 automatically picks up each package's <pkg>.rpmlintrc
+          # from the directory next to the spec file it is checking.
+          # Warnings are allowed; any rpmlint error (" E: " line) fails the
+          # job. Built RPMs get their own rpmlint pass in the build-all job.
+          FAILED=0
+          for pkg in flux-security flux-core flux-sched flux-accounting; do
+            echo "=== Linting $pkg.spec ==="
+            OUTPUT=$(rpmlint "$pkg/$pkg.spec" 2>&1) || true
+            echo "$OUTPUT"
+            if echo "$OUTPUT" | grep -q ' E: '; then
+              echo "ERROR: rpmlint reported errors in $pkg.spec:"
+              echo "$OUTPUT" | grep ' E: '
+              FAILED=1
+            fi
+          done
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo "=== Spec lint FAILED: rpmlint errors found above ==="
+            exit 1
+          fi
+          echo "=== All spec files linted: no rpmlint errors (warnings allowed) ==="
 
   spec-validation:
     name: Validate spec files
@@ -97,7 +92,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Install rpmspec
         run: dnf install -y rpm-build glibc-langpack-en
-      
+
       - name: Validate spec file syntax
         run: |
           for spec in flux-*/flux-*.spec; do
@@ -105,12 +100,12 @@ jobs:
             rpmspec -P "$spec" > /dev/null
             echo "  ✓ $spec is valid"
           done
-      
+
       - name: Check required spec fields
         run: |
           for spec in flux-*/flux-*.spec; do
             echo "Checking required fields in: $spec"
-            
+
             # Check for required fields
             grep -q "^Name:" "$spec" || { echo "Missing Name in $spec"; exit 1; }
             grep -q "^Version:" "$spec" || { echo "Missing Version in $spec"; exit 1; }
@@ -120,14 +115,14 @@ jobs:
             grep -q "^Source0:" "$spec" || { echo "Missing Source0 in $spec"; exit 1; }
             grep -q "^%description" "$spec" || { echo "Missing %description in $spec"; exit 1; }
             grep -q "^%changelog" "$spec" || { echo "Missing %changelog in $spec"; exit 1; }
-            
+
             # Check for Fedora best practices
             grep -q "%{?dist}" "$spec" || echo "  Warning: %{?dist} not found in Release"
             grep -q "%autosetup" "$spec" || grep -q "%setup" "$spec" || echo "  Warning: No %setup or %autosetup found"
-            
+
             echo "  ✓ $spec has all required fields"
           done
-      
+
       - name: Check changelog format
         run: |
           for spec in flux-*/flux-*.spec; do
@@ -146,57 +141,46 @@ jobs:
       - id: check
         run: |
           if docker manifest inspect ${{ env.BUILDER_IMAGE }} > /dev/null 2>&1; then
-            echo "image=${{ env.BUILDER_IMAGE }}" >> $GITHUB_OUTPUT
+            echo "image=${{ env.BUILDER_IMAGE }}" >> "$GITHUB_OUTPUT"
           else
-            echo "image=fedora:latest" >> $GITHUB_OUTPUT
+            echo "image=fedora:latest" >> "$GITHUB_OUTPUT"
           fi
 
-  # Build SRPMs (no lint dependency for faster startup)
+  # Build SRPMs (uses the prebuilt builder image when available so the
+  # tool install is a no-op; lint jobs are intentionally not dependencies)
   build-srpms:
     name: Build SRPMs
     runs-on: ubuntu-latest
+    needs: [check-container]
     container:
-      image: fedora:latest
+      image: ${{ needs.check-container.outputs.image }}
     steps:
       - uses: actions/checkout@v5
+
+      # Exact key on the sources files, deliberately without
+      # restore-keys: build-srpm.sh hard-fails on checksum mismatch, so
+      # never offer it stale tarballs; a version bump is a clean miss.
+      - name: Cache release tarballs
+        uses: actions/cache@v6
+        with:
+          path: ~/rpmbuild/SOURCES
+          key: srpm-tarballs-${{ hashFiles('flux-*/sources') }}
+
       - name: Build all SRPMs
         run: |
-          dnf install -y rpm-build rpmdevtools wget
-          rpmdev-setuptree
-          
-          # Get versions
-          SEC_VER=$(grep '^Version:' flux-security/flux-security.spec | awk '{print $2}')
-          CORE_VER=$(grep '^Version:' flux-core/flux-core.spec | awk '{print $2}')
-          SCHED_VER=$(grep '^Version:' flux-sched/flux-sched.spec | awk '{print $2}')
-          ACCT_VER=$(grep '^Version:' flux-accounting/flux-accounting.spec | awk '{print $2}')
-          
-          # Download sources in parallel
-          wget -q -O ~/rpmbuild/SOURCES/flux-security-${SEC_VER}.tar.gz \
-            https://github.com/flux-framework/flux-security/releases/download/v${SEC_VER}/flux-security-${SEC_VER}.tar.gz &
-          wget -q -O ~/rpmbuild/SOURCES/flux-core-${CORE_VER}.tar.gz \
-            https://github.com/flux-framework/flux-core/releases/download/v${CORE_VER}/flux-core-${CORE_VER}.tar.gz &
-          wget -q -O ~/rpmbuild/SOURCES/flux-sched-${SCHED_VER}.tar.gz \
-            https://github.com/flux-framework/flux-sched/releases/download/v${SCHED_VER}/flux-sched-${SCHED_VER}.tar.gz &
-          wget -q -O ~/rpmbuild/SOURCES/flux-accounting-${ACCT_VER}.tar.gz \
-            https://github.com/flux-framework/flux-accounting/releases/download/v${ACCT_VER}/flux-accounting-${ACCT_VER}.tar.gz &
-          wait
-          
-          # Copy specs and patches
-          cp flux-security/flux-security.spec ~/rpmbuild/SPECS/
-          cp flux-core/flux-core.spec ~/rpmbuild/SPECS/
-          cp flux-sched/flux-sched.spec ~/rpmbuild/SPECS/
-          cp flux-accounting/flux-accounting.spec ~/rpmbuild/SPECS/
-          cp flux-security/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
-          cp flux-core/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
-          cp flux-sched/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
-          cp flux-accounting/*.patch ~/rpmbuild/SOURCES/ 2>/dev/null || true
-          
-          # Build SRPMs
-          rpmbuild -bs ~/rpmbuild/SPECS/flux-security.spec
-          rpmbuild -bs ~/rpmbuild/SPECS/flux-core.spec
-          rpmbuild -bs ~/rpmbuild/SPECS/flux-sched.spec
-          rpmbuild -bs ~/rpmbuild/SPECS/flux-accounting.spec
-          
+          # Builder image ships these already; the fedora:latest
+          # fallback container installs them here.
+          if ! command -v rpmbuild >/dev/null 2>&1 || \
+             ! command -v rpmdev-setuptree >/dev/null 2>&1 || \
+             ! command -v wget >/dev/null 2>&1; then
+            dnf install -y rpm-build rpmdevtools wget
+          fi
+
+          # build-srpm.sh downloads the release tarballs, verifies their
+          # SHA256 against flux-*/sources, and builds all four SRPMs into
+          # ~/rpmbuild/SRPMS/, exiting non-zero on any failure.
+          ./scripts/build-srpm.sh all
+
           # Move to workspace for upload
           mkdir -p srpms
           mv ~/rpmbuild/SRPMS/*.src.rpm srpms/
@@ -252,6 +236,91 @@ jobs:
       - name: List SRPMs
         run: ls -la ./srpms/
 
+      # ============================================================
+      # Persistent caches (free-tier actions/cache, 10 GB repo budget):
+      # - mock root/package caches: one immutable entry per distro per
+      #   week (exact key hit -> no re-upload), cuts chroot init and
+      #   builddep download time
+      # - ccache: fresh entry per run with prefix restore, cuts C/C++
+      #   compile time on repeat builds
+      # ============================================================
+      - name: Install cache and speed tooling
+        run: |
+          # zstd: fast actions/cache compression
+          # nosync: mock preloads it to skip fsync during chroot package
+          # installs (safe in throwaway CI chroots)
+          command -v zstd >/dev/null 2>&1 || dnf install -y zstd
+          rpm -q nosync >/dev/null 2>&1 || dnf install -y nosync
+
+      - name: Compute cache week key
+        id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      # The -bootstrap root cache matters: without it mock reinstalls
+      # dnf tooling into a fresh bootstrap chroot on every run (~25s).
+      # v2: key bumped when the bootstrap path was added, so this week's
+      # already-saved v1 entry doesn't block saving the new layout.
+      - name: Restore mock root and package caches
+        uses: actions/cache@v6
+        with:
+          path: |
+            /var/cache/mock/${{ matrix.mock-release }}/root_cache
+            /var/cache/mock/${{ matrix.mock-release }}-bootstrap/root_cache
+            /var/cache/mock/${{ matrix.mock-release }}/dnf_cache
+          key: mock-${{ matrix.mock-release }}-v2-${{ steps.week.outputs.week }}
+          restore-keys: |
+            mock-${{ matrix.mock-release }}-v2-
+            mock-${{ matrix.mock-release }}-
+
+      - name: Restore compiler cache (ccache)
+        uses: actions/cache@v6
+        with:
+          path: /var/cache/mock/${{ matrix.mock-release }}/ccache
+          key: ccache-${{ matrix.mock-release }}-${{ github.run_id }}
+          restore-keys: |
+            ccache-${{ matrix.mock-release }}-
+
+      - name: Configure mock caching
+        run: |
+          # Enable mock's ccache plugin (persisted across runs above).
+          # root_cache/dnf_cache are enabled by default; we only persist
+          # them. Ensure the cached paths exist so the post-job cache
+          # save never fails on a missing directory.
+          mkdir -p "/var/cache/mock/${{ matrix.mock-release }}/root_cache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}-bootstrap/root_cache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}/dnf_cache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}/ccache"
+
+          # Debuginfo extraction (find-debuginfo/dwz) is skipped: these
+          # CI builds never ship or install debuginfo RPMs (artifacts
+          # exclude them, smoke tests don't use them). COPR production
+          # builds still generate debuginfo after merge.
+          cat >> /etc/mock/site-defaults.cfg <<'EOF'
+          config_opts['plugin_conf']['ccache_enable'] = True
+          config_opts['plugin_conf']['ccache_opts']['max_cache_size'] = '1G'
+          config_opts['nosync'] = True
+          config_opts['macros']['%_enable_debug_packages'] = '0'
+          config_opts['macros']['%debug_package'] = '%{nil}'
+          EOF
+
+          # flux-sched on EL9 sources /opt/rh/gcc-toolset-13/enable, which
+          # puts the toolset bin dir ahead of ccache's masquerade dir in
+          # PATH, so its C++ build bypasses ccache. CMake >= 3.17 reads
+          # these environment variables and wraps whatever compiler it
+          # resolves in ccache. Scoped to el9 (the only chroot using a
+          # toolset); elsewhere the PATH masquerade already covers cmake.
+          if [ "${{ matrix.short-name }}" = "el9" ]; then
+            {
+              echo "config_opts['environment']['CMAKE_C_COMPILER_LAUNCHER'] = 'ccache'"
+              echo "config_opts['environment']['CMAKE_CXX_COMPILER_LAUNCHER'] = 'ccache'"
+            } >> /etc/mock/site-defaults.cfg
+          fi
+
+          # Keep the config file's mtime older than any restored root
+          # cache so mock never considers the cache stale because this
+          # file was just (re)written.
+          touch -d '2020-01-01 00:00:00' /etc/mock/site-defaults.cfg
+
       - name: Initialize mock
         run: mock -r ${{ matrix.mock-release }} --init
 
@@ -265,8 +334,10 @@ jobs:
 
       - name: Install flux-security in mock
         run: |
-          SECURITY_RPM=$(ls results-security/flux-security-[0-9]*.x86_64.rpm | head -1)
-          SECURITY_DEVEL_RPM=$(ls results-security/flux-security-devel-*.x86_64.rpm | head -1)
+          security_rpms=(results-security/flux-security-[0-9]*.x86_64.rpm)
+          security_devel_rpms=(results-security/flux-security-devel-*.x86_64.rpm)
+          SECURITY_RPM="${security_rpms[0]}"
+          SECURITY_DEVEL_RPM="${security_devel_rpms[0]}"
           echo "Installing: $SECURITY_RPM $SECURITY_DEVEL_RPM"
           # Use --no-clean and --no-cleanup-after to preserve chroot state
           mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
@@ -281,8 +352,10 @@ jobs:
 
       - name: Install flux-core in mock
         run: |
-          CORE_RPM=$(ls results-core/flux-core-[0-9]*.x86_64.rpm | head -1)
-          CORE_DEVEL_RPM=$(ls results-core/flux-core-devel-*.x86_64.rpm | head -1)
+          core_rpms=(results-core/flux-core-[0-9]*.x86_64.rpm)
+          core_devel_rpms=(results-core/flux-core-devel-*.x86_64.rpm)
+          CORE_RPM="${core_rpms[0]}"
+          CORE_DEVEL_RPM="${core_devel_rpms[0]}"
           echo "Installing: $CORE_RPM $CORE_DEVEL_RPM"
           # Use --no-clean and --no-cleanup-after to preserve chroot state
           mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --install "$CORE_RPM" "$CORE_DEVEL_RPM"
@@ -290,17 +363,21 @@ jobs:
       # ============================================================
       # Build flux-sched and flux-accounting in parallel (both depend only on core)
       # ============================================================
-      
+
       # Prepare a separate chroot for flux-accounting (needed to avoid mock lock contention)
       - name: Prepare parallel build chroot for flux-accounting
         run: |
           mock -r ${{ matrix.mock-release }} --uniqueext=accounting --init
-          
-          SECURITY_RPM=$(ls results-security/flux-security-[0-9]*.x86_64.rpm | head -1)
-          SECURITY_DEVEL_RPM=$(ls results-security/flux-security-devel-*.x86_64.rpm | head -1)
-          CORE_RPM=$(ls results-core/flux-core-[0-9]*.x86_64.rpm | head -1)
-          CORE_DEVEL_RPM=$(ls results-core/flux-core-devel-*.x86_64.rpm | head -1)
-          
+
+          security_rpms=(results-security/flux-security-[0-9]*.x86_64.rpm)
+          security_devel_rpms=(results-security/flux-security-devel-*.x86_64.rpm)
+          core_rpms=(results-core/flux-core-[0-9]*.x86_64.rpm)
+          core_devel_rpms=(results-core/flux-core-devel-*.x86_64.rpm)
+          SECURITY_RPM="${security_rpms[0]}"
+          SECURITY_DEVEL_RPM="${security_devel_rpms[0]}"
+          CORE_RPM="${core_rpms[0]}"
+          CORE_DEVEL_RPM="${core_devel_rpms[0]}"
+
           mock -r ${{ matrix.mock-release }} --uniqueext=accounting \
             --no-clean --no-cleanup-after \
             --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM" "$CORE_RPM" "$CORE_DEVEL_RPM"
@@ -308,29 +385,29 @@ jobs:
       - name: Build flux-sched and flux-accounting (parallel)
         run: |
           set -o pipefail
-          
+
           mock -r ${{ matrix.mock-release }} \
             --no-clean --no-cleanup-after \
             --rebuild srpms/flux-sched-*.src.rpm \
             --resultdir=results-sched 2>&1 | tee sched-build.log &
           SCHED_PID=$!
-          
+
           mock -r ${{ matrix.mock-release }} --uniqueext=accounting \
             --no-clean --no-cleanup-after \
             --rebuild srpms/flux-accounting-*.src.rpm \
             --resultdir=results-accounting 2>&1 | tee accounting-build.log &
           ACCT_PID=$!
-          
+
           # Wait for both builds and capture exit codes
           SCHED_EXIT=0
           ACCT_EXIT=0
           wait $SCHED_PID || SCHED_EXIT=$?
           wait $ACCT_PID || ACCT_EXIT=$?
-          
+
           echo "=== Parallel builds completed ==="
           echo "flux-sched exit code: $SCHED_EXIT"
           echo "flux-accounting exit code: $ACCT_EXIT"
-          
+
           # Fail if either build failed
           if [ $SCHED_EXIT -ne 0 ]; then
             echo "ERROR: flux-sched build failed"
@@ -340,8 +417,62 @@ jobs:
             echo "ERROR: flux-accounting build failed"
             exit $ACCT_EXIT
           fi
-          
+
           echo "=== Both builds succeeded ==="
+
+      # ============================================================
+      # Lint the built RPMs with each package's rpmlintrc filters
+      # ============================================================
+      - name: Run rpmlint on built RPMs
+        run: |
+          # The prebuilt builder image ships rpmlint; the fedora:latest
+          # fallback does not, so install it when missing.
+          command -v rpmlint >/dev/null 2>&1 || dnf install -y rpmlint
+
+          FAILED=0
+          for pkg in security core sched accounting; do
+            dir="results-$pkg"
+            rcfile="flux-$pkg/flux-$pkg.rpmlintrc"
+            echo "=== Linting built RPMs in $dir (filters: $rcfile) ==="
+
+            if [ ! -d "$dir" ]; then
+              echo "ERROR: expected results directory $dir does not exist"
+              FAILED=1
+              continue
+            fi
+
+            # Collect RPMs, skipping debuginfo/debugsource packages
+            rpms=()
+            for rpm in "$dir"/*.rpm; do
+              [ -e "$rpm" ] || continue
+              case "$rpm" in
+                *-debuginfo-*|*-debugsource-*) continue ;;
+              esac
+              rpms+=("$rpm")
+            done
+
+            if [ "${#rpms[@]}" -eq 0 ]; then
+              echo "ERROR: no RPMs found in $dir"
+              FAILED=1
+              continue
+            fi
+
+            # Warnings are allowed; any rpmlint error (" E: " line) fails
+            # the job.
+            OUTPUT=$(rpmlint -r "$rcfile" "${rpms[@]}" 2>&1) || true
+            echo "$OUTPUT"
+            if echo "$OUTPUT" | grep -q ' E: '; then
+              echo "ERROR: rpmlint reported errors for flux-$pkg:"
+              echo "$OUTPUT" | grep ' E: '
+              FAILED=1
+            fi
+          done
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo "=== RPM lint FAILED: see errors above (warnings are allowed) ==="
+            exit 1
+          fi
+          echo "=== All built RPMs linted: no rpmlint errors (warnings allowed) ==="
 
       # ============================================================
       # Generate summary and upload artifacts
@@ -349,21 +480,37 @@ jobs:
       - name: Generate build summary
         if: always()
         run: |
-          echo "=== Build Summary for ${{ matrix.mock-release }} ===" | tee build-summary.txt
-          echo "Build completed: $(date)" >> build-summary.txt
-          echo "" >> build-summary.txt
-          echo "=== flux-security packages ===" >> build-summary.txt
-          ls -la results-security/*.rpm 2>/dev/null | grep -v debuginfo >> build-summary.txt || echo "No packages" >> build-summary.txt
-          echo "" >> build-summary.txt
-          echo "=== flux-core packages ===" >> build-summary.txt
-          ls -la results-core/*.rpm 2>/dev/null | grep -v debuginfo >> build-summary.txt || echo "No packages" >> build-summary.txt
-          echo "" >> build-summary.txt
-          echo "=== flux-sched packages ===" >> build-summary.txt
-          ls -la results-sched/*.rpm 2>/dev/null | grep -v debuginfo >> build-summary.txt || echo "No packages" >> build-summary.txt
-          echo "" >> build-summary.txt
-          echo "=== flux-accounting packages ===" >> build-summary.txt
-          ls -la results-accounting/*.rpm 2>/dev/null | grep -v debuginfo >> build-summary.txt || echo "No packages" >> build-summary.txt
+          {
+            echo "=== Build Summary for ${{ matrix.mock-release }} ==="
+            echo "Build completed: $(date)"
+            for pkg in security core sched accounting; do
+              echo ""
+              echo "=== flux-$pkg packages ==="
+              found=0
+              for rpm in "results-$pkg"/*.rpm; do
+                [ -e "$rpm" ] || continue
+                case "$rpm" in
+                  *-debuginfo-*|*-debugsource-*) continue ;;
+                esac
+                ls -la "$rpm"
+                found=1
+              done
+              if [ "$found" -eq 0 ]; then
+                echo "No packages"
+              fi
+            done
+            echo ""
+            echo "=== Cache sizes ==="
+            du -sh "/var/cache/mock/${{ matrix.mock-release }}/ccache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}/root_cache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}-bootstrap/root_cache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}/dnf_cache" \
+                   2>/dev/null || echo "no caches"
+          } | tee build-summary.txt
 
+      # debuginfo/debugsource RPMs are excluded: they dominate artifact
+      # size, and the smoke tests only install the binary RPMs. Rebuild
+      # locally if debuginfo is ever needed.
       - name: Upload all build results
         uses: actions/upload-artifact@v6
         if: always()
@@ -376,6 +523,8 @@ jobs:
             results-accounting/
             *-build.log
             build-summary.txt
+            !results-*/*-debuginfo-*.rpm
+            !results-*/*-debugsource-*.rpm
 
       - name: Cleanup mock
         if: always()
@@ -406,7 +555,7 @@ jobs:
             image: fedora:44
             short-name: f44
           - distro: fedora-rawhide
-            image: ghcr.io/${{ github.repository }}/flux-rpm-builder:latest
+            image: fedora:rawhide
             short-name: rawhide
             allow-failure: true
           - distro: centos-9
@@ -425,6 +574,29 @@ jobs:
           name: rpms-${{ matrix.short-name }}
           path: ./rpms
 
+      # Persist dnf's package/metadata cache: the smoke jobs sit on the
+      # workflow's critical path and most of their time is dnf downloads.
+      # (dnf4 uses /var/cache/dnf, dnf5 uses /var/cache/libdnf5.)
+      - name: Compute cache week key
+        id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore dnf package cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            /var/cache/dnf
+            /var/cache/libdnf5
+          key: smoke-dnf-${{ matrix.distro }}-${{ steps.week.outputs.week }}-${{ github.run_id }}
+          restore-keys: |
+            smoke-dnf-${{ matrix.distro }}-${{ steps.week.outputs.week }}-
+            smoke-dnf-${{ matrix.distro }}-
+
+      - name: Keep dnf packages for the cache
+        run: |
+          mkdir -p /var/cache/dnf /var/cache/libdnf5
+          echo "keepcache=1" >> /etc/dnf/dnf.conf
+
       - name: Enable EPEL (CentOS only)
         if: startsWith(matrix.distro, 'centos')
         run: |
@@ -440,7 +612,7 @@ jobs:
             rpms/results-core/flux-core-[0-9]*.x86_64.rpm \
             rpms/results-sched/flux-sched-[0-9]*.x86_64.rpm \
             rpms/results-accounting/flux-accounting-[0-9]*.x86_64.rpm
-          
+
           echo "=== Installed Flux packages ==="
           rpm -qa | grep -E '^flux' | sort
 
@@ -448,7 +620,7 @@ jobs:
         run: |
           # Install util-linux (provides runuser), munge for security
           dnf install -y util-linux munge munge-libs
-          
+
           # Setup MUNGE
           dd if=/dev/urandom bs=1 count=1024 > /etc/munge/munge.key 2>/dev/null
           chown -R munge:munge /etc/munge/munge.key
@@ -458,7 +630,7 @@ jobs:
           chmod 755 /run/munge
           runuser -u munge -- /usr/sbin/munged
           echo "=== MUNGE started ==="
-          
+
           # Create test user (flux prefers non-root)
           if ! id fluxuser &>/dev/null; then
             groupadd fluxuser || true
@@ -471,12 +643,14 @@ jobs:
 
       - name: Setup flux environment
         run: |
+          # Single quotes are intentional: expansion happens in runuser's bash.
+          # shellcheck disable=SC2016
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Flux environment ==="
             echo "FLUX_EXEC_PATH=$FLUX_EXEC_PATH"
             echo "PYTHONPATH=$PYTHONPATH"
-            
+
             echo "=== Verifying FLUX_EXEC_PATH contents ==="
             for dir in $(echo $FLUX_EXEC_PATH | tr ":" " "); do
               if [ -d "$dir" ]; then
@@ -487,17 +661,21 @@ jobs:
 
       - name: Verify flux-core CLI (standalone)
         run: |
+          # Single quotes are intentional: expansion happens in runuser's bash.
+          # shellcheck disable=SC2016
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== flux --version ==="
             flux --version
-            
+
             echo "=== flux --help ==="
             flux --help
           '
 
       - name: Verify Python bindings
         run: |
+          # Single quotes are intentional: expansion happens in runuser's bash.
+          # shellcheck disable=SC2016
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Testing flux Python module import ==="
@@ -508,11 +686,13 @@ jobs:
 
       - name: Verify flux instance basic functionality
         run: |
+          # Single quotes are intentional: expansion happens in runuser's bash.
+          # shellcheck disable=SC2016
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Basic instance startup (test mode) ==="
             timeout 30 flux start --test-size=1 -v echo "Hello from flux!"
-            
+
             echo "=== Broker attributes and modules ==="
             timeout 60 flux start --test-size=1 -v sh -c "
               flux version
@@ -524,6 +704,8 @@ jobs:
 
       - name: Test job submission and execution
         run: |
+          # Single quotes are intentional: expansion happens in runuser's bash.
+          # shellcheck disable=SC2016
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Submit and run a simple job ==="
@@ -540,6 +722,8 @@ jobs:
 
       - name: Test resource and queue commands
         run: |
+          # Single quotes are intentional: expansion happens in runuser's bash.
+          # shellcheck disable=SC2016
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Resource and queue status ==="
@@ -553,6 +737,8 @@ jobs:
 
       - name: Test KVS operations
         run: |
+          # Single quotes are intentional: expansion happens in runuser's bash.
+          # shellcheck disable=SC2016
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== KVS read/write ==="
@@ -566,6 +752,8 @@ jobs:
 
       - name: Test event system
         run: |
+          # Single quotes are intentional: expansion happens in runuser's bash.
+          # shellcheck disable=SC2016
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Event pub/sub ==="
@@ -580,6 +768,8 @@ jobs:
 
       - name: Verify flux-sched scheduling
         run: |
+          # Single quotes are intentional: expansion happens in runuser's bash.
+          # shellcheck disable=SC2016
           if rpm -q flux-sched &>/dev/null; then
             runuser -u fluxuser -- bash -c '
               eval $(flux env)
@@ -602,19 +792,21 @@ jobs:
 
       - name: Verify flux-accounting plugin
         run: |
+          # Single quotes are intentional: expansion happens in runuser's bash.
+          # shellcheck disable=SC2016
           if rpm -q flux-accounting &>/dev/null; then
             runuser -u fluxuser -- bash -c '
               eval $(flux env)
               echo "=== flux-accounting verification ==="
-              
+
               echo "Checking installed files..."
               ls -la /usr/lib64/flux/job-manager/plugins/mf_priority.so
               ls -la /usr/libexec/flux/cmd/flux-account*.py | head -5
-              
+
               echo "Testing flux account command..."
               flux account --help
               flux account-priority-update --help
-              
+
               echo "flux-accounting commands verified"
             '
           else
@@ -624,14 +816,21 @@ jobs:
       - name: Generate smoke test summary
         if: always()
         run: |
-          echo "=== Smoke Test Summary ===" | tee smoke-test-summary.txt
-          echo "Distro: ${{ matrix.distro }}" >> smoke-test-summary.txt
-          echo "Date: $(date)" >> smoke-test-summary.txt
-          echo "" >> smoke-test-summary.txt
-          echo "Installed packages:" >> smoke-test-summary.txt
-          rpm -qa | grep -E '^flux' | sort >> smoke-test-summary.txt
-          echo "" >> smoke-test-summary.txt
-          echo "All smoke tests passed!" >> smoke-test-summary.txt
+          {
+            echo "=== Smoke Test Summary ==="
+            echo "Distro: ${{ matrix.distro }}"
+            echo "Date: $(date)"
+            echo "Job status: ${{ job.status }}"
+            echo ""
+            echo "Installed packages:"
+            rpm -qa | grep -E '^flux' | sort
+            echo ""
+            if [ "${{ job.status }}" = "success" ]; then
+              echo "All smoke tests passed!"
+            else
+              echo "Smoke tests did NOT pass (job status: ${{ job.status }})"
+            fi
+          } | tee smoke-test-summary.txt
 
       - name: Upload smoke test results
         uses: actions/upload-artifact@v6

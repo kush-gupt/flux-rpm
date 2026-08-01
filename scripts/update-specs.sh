@@ -27,7 +27,8 @@ get_latest_release() {
 }
 
 get_srpm_url() {
-    local assets=$(curl -s "https://api.github.com/repos/flux-framework/$1/releases/tags/$2")
+    local assets
+    assets=$(curl -s "https://api.github.com/repos/flux-framework/$1/releases/tags/$2")
     echo "$assets" | jq -r '.assets[] | select(.name | endswith(".src.rpm")) | .browser_download_url' | head -1
 }
 
@@ -35,7 +36,8 @@ get_srpm_url() {
 # Reference: FEDORA_CHANGES.md
 apply_fedora_patches() {
     local spec=$1
-    local pkg=$(basename "$spec" .spec)
+    local pkg
+    pkg=$(basename "$spec" .spec)
 
     log "Applying Fedora adaptations to $spec"
 
@@ -199,11 +201,12 @@ update_package() {
 
     log "Updating $pkg to $ver"
 
-    local srpm_url=$(get_srpm_url "$pkg" "$ver")
+    local srpm_url
+    srpm_url=$(get_srpm_url "$pkg" "$ver")
     if [ -z "$srpm_url" ] || [ "$srpm_url" = "null" ]; then
         warn "No SRPM available for $pkg $ver"
-        warn "flux-sched spec is manually maintained in this repo"
-        warn "Please update flux-sched/flux-sched.spec manually"
+        warn "The $pkg spec is manually maintained in this repo"
+        warn "Please update ${pkg}/${pkg}.spec manually"
         return 1
     fi
 
@@ -227,16 +230,18 @@ case "${1:-}" in
 esac
 
 case "${1:-all}" in
-    flux-security) update_package flux-security "$VERSION" ;;
-    flux-core)     update_package flux-core "$VERSION" ;;
-    flux-sched)    update_package flux-sched "$VERSION" ;;
+    flux-security)   update_package flux-security "$VERSION" ;;
+    flux-core)       update_package flux-core "$VERSION" ;;
+    flux-sched)      update_package flux-sched "$VERSION" ;;
+    flux-accounting) update_package flux-accounting "$VERSION" ;;
     all)
         update_package flux-security "$VERSION"
         update_package flux-core "$VERSION"
-        update_package flux-sched "$VERSION" || true  # flux-sched may not have SRPM
+        update_package flux-sched "$VERSION" || true       # flux-sched may not have SRPM
+        update_package flux-accounting "$VERSION" || true  # flux-accounting may not have SRPM
         ;;
     -h|--help)
-        echo "Usage: $0 [-v VERSION] [flux-core|flux-security|flux-sched|all]"
+        echo "Usage: $0 [-v VERSION] [flux-core|flux-security|flux-sched|flux-accounting|all]"
         echo ""
         echo "Options:"
         echo "  -v, --version VERSION   Update to specific version (applies to next package)"
@@ -246,13 +251,14 @@ case "${1:-all}" in
         echo "  flux-security           Update flux-security spec"
         echo "  flux-core               Update flux-core spec"
         echo "  flux-sched              Update flux-sched spec (note: may not have upstream SRPM)"
+        echo "  flux-accounting         Update flux-accounting spec (note: may not have upstream SRPM)"
         echo "  all                     Update all packages (default)"
         echo ""
         echo "This script downloads upstream SRPMs and applies Fedora packaging"
         echo "adaptations as documented in FEDORA_CHANGES.md"
         echo ""
-        echo "Note: flux-sched upstream releases may not include SRPMs."
-        echo "The flux-sched spec file in this repo may need manual updates."
+        echo "Note: flux-sched and flux-accounting upstream releases may not include SRPMs."
+        echo "The spec files for those packages in this repo may need manual updates."
         exit 0
         ;;
     *) die "Unknown: $1" ;;
