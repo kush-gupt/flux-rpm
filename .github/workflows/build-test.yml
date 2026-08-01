@@ -246,14 +246,20 @@ jobs:
         id: week
         run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
 
+      # The -bootstrap root cache matters: without it mock reinstalls
+      # dnf tooling into a fresh bootstrap chroot on every run (~25s).
+      # v2: key bumped when the bootstrap path was added, so this week's
+      # already-saved v1 entry doesn't block saving the new layout.
       - name: Restore mock root and package caches
         uses: actions/cache@v6
         with:
           path: |
             /var/cache/mock/${{ matrix.mock-release }}/root_cache
+            /var/cache/mock/${{ matrix.mock-release }}-bootstrap/root_cache
             /var/cache/mock/${{ matrix.mock-release }}/dnf_cache
-          key: mock-${{ matrix.mock-release }}-${{ steps.week.outputs.week }}
+          key: mock-${{ matrix.mock-release }}-v2-${{ steps.week.outputs.week }}
           restore-keys: |
+            mock-${{ matrix.mock-release }}-v2-
             mock-${{ matrix.mock-release }}-
 
       - name: Restore compiler cache (ccache)
@@ -271,13 +277,20 @@ jobs:
           # them. Ensure the cached paths exist so the post-job cache
           # save never fails on a missing directory.
           mkdir -p "/var/cache/mock/${{ matrix.mock-release }}/root_cache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}-bootstrap/root_cache" \
                    "/var/cache/mock/${{ matrix.mock-release }}/dnf_cache" \
                    "/var/cache/mock/${{ matrix.mock-release }}/ccache"
 
+          # Debuginfo extraction (find-debuginfo/dwz) is skipped: these
+          # CI builds never ship or install debuginfo RPMs (artifacts
+          # exclude them, smoke tests don't use them). COPR production
+          # builds still generate debuginfo after merge.
           cat >> /etc/mock/site-defaults.cfg <<'EOF'
           config_opts['plugin_conf']['ccache_enable'] = True
           config_opts['plugin_conf']['ccache_opts']['max_cache_size'] = '1G'
           config_opts['nosync'] = True
+          config_opts['macros']['%_enable_debug_packages'] = '0'
+          config_opts['macros']['%debug_package'] = '%{nil}'
           EOF
 
           # flux-sched on EL9 sources /opt/rh/gcc-toolset-13/enable, which
@@ -480,6 +493,7 @@ jobs:
             echo "=== Cache sizes ==="
             du -sh "/var/cache/mock/${{ matrix.mock-release }}/ccache" \
                    "/var/cache/mock/${{ matrix.mock-release }}/root_cache" \
+                   "/var/cache/mock/${{ matrix.mock-release }}-bootstrap/root_cache" \
                    "/var/cache/mock/${{ matrix.mock-release }}/dnf_cache" \
                    2>/dev/null || echo "no caches"
           } | tee build-summary.txt
