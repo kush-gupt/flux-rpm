@@ -280,6 +280,19 @@ jobs:
           config_opts['nosync'] = True
           EOF
 
+          # flux-sched on EL9 sources /opt/rh/gcc-toolset-13/enable, which
+          # puts the toolset bin dir ahead of ccache's masquerade dir in
+          # PATH, so its C++ build bypasses ccache. CMake >= 3.17 reads
+          # these environment variables and wraps whatever compiler it
+          # resolves in ccache. Scoped to el9 (the only chroot using a
+          # toolset); elsewhere the PATH masquerade already covers cmake.
+          if [ "${{ matrix.short-name }}" = "el9" ]; then
+            {
+              echo "config_opts['environment']['CMAKE_C_COMPILER_LAUNCHER'] = 'ccache'"
+              echo "config_opts['environment']['CMAKE_CXX_COMPILER_LAUNCHER'] = 'ccache'"
+            } >> /etc/mock/site-defaults.cfg
+          fi
+
           # Keep the config file's mtime older than any restored root
           # cache so mock never considers the cache stale because this
           # file was just (re)written.
@@ -536,6 +549,29 @@ jobs:
         with:
           name: rpms-${{ matrix.short-name }}
           path: ./rpms
+
+      # Persist dnf's package/metadata cache: the smoke jobs sit on the
+      # workflow's critical path and most of their time is dnf downloads.
+      # (dnf4 uses /var/cache/dnf, dnf5 uses /var/cache/libdnf5.)
+      - name: Compute cache week key
+        id: week
+        run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore dnf package cache
+        uses: actions/cache@v6
+        with:
+          path: |
+            /var/cache/dnf
+            /var/cache/libdnf5
+          key: smoke-dnf-${{ matrix.distro }}-${{ steps.week.outputs.week }}-${{ github.run_id }}
+          restore-keys: |
+            smoke-dnf-${{ matrix.distro }}-${{ steps.week.outputs.week }}-
+            smoke-dnf-${{ matrix.distro }}-
+
+      - name: Keep dnf packages for the cache
+        run: |
+          mkdir -p /var/cache/dnf /var/cache/libdnf5
+          echo "keepcache=1" >> /etc/dnf/dnf.conf
 
       - name: Enable EPEL (CentOS only)
         if: startsWith(matrix.distro, 'centos')
