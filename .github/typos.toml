@@ -31,6 +31,8 @@ ldconfig = "ldconfig"
 munge = "munge"
 kvs = "kvs"
 toml = "toml"
+# Upstream identifier: payload_decode_cpy
+cpy = "cpy"
 
 [files]
 extend-exclude = [
