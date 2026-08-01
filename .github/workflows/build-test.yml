@@ -156,6 +156,16 @@ jobs:
       image: ${{ needs.check-container.outputs.image }}
     steps:
       - uses: actions/checkout@v5
+
+      # Exact key on the sources files, deliberately without
+      # restore-keys: build-srpm.sh hard-fails on checksum mismatch, so
+      # never offer it stale tarballs; a version bump is a clean miss.
+      - name: Cache release tarballs
+        uses: actions/cache@v6
+        with:
+          path: ~/rpmbuild/SOURCES
+          key: srpm-tarballs-${{ hashFiles('flux-*/sources') }}
+
       - name: Build all SRPMs
         run: |
           # Builder image ships these already; the fedora:latest
