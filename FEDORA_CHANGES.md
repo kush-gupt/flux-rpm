@@ -68,7 +68,7 @@ These adaptations apply across the four packages where applicable. Not every ite
 ### File Marking and Ownership
 
 - Add `%license LICENSE` and `%doc README.md NEWS.md`
-- Add `%config(noreplace)` for config and rc scripts
+- Add `%config(noreplace)` for configuration files; executable rc hooks under `/etc/flux/rc*.d` are installed as regular files instead (rpmlint: executables must not be config files, and stale local copies of code hooks would break on upgrade)
 - Add `%dir` directives for directories the package creates (e.g. `/etc/flux/system/`, `/etc/flux/system/cron.d/`)
 
 ### Systemd Scriptlets
@@ -95,7 +95,7 @@ Fedora:   * Wed Dec  3 2025 Name <email> - 0.81.0-1
 
 ### rpmlintrc Files
 
-Each package has a `.rpmlintrc` file alongside its spec to suppress known false positives (domain-specific spelling warnings, intentional devel-file placement, setuid binary warnings).
+Each package has a `.rpmlintrc` file alongside its spec to suppress known false positives (domain-specific spelling warnings, intentional devel-file placement, setuid binary warnings, and outdated FSF addresses in upstream license headers).
 
 ## Package-Specific Notes
 
@@ -107,6 +107,7 @@ Each package has a `.rpmlintrc` file alongside its spec to suppress known false 
 - **~~Shebang mangling exclusion~~**: ~~`%global __brp_mangle_shebangs_exclude_from ^%{_libexecdir}/flux/`~~ -- removed; cmd scripts now have proper shebangs (flux-core#7643, flux-accounting#873)
 - **rpath removal**: Uses `chrpath -d` with improved error handling (`xargs -I{}` instead of deprecated `-ti`, `2>/dev/null || true`)
 - **Custom preun**: Stops `flux.service` gracefully before upgrade/removal, with `2>/dev/null` on systemctl check
+- **tmpfiles creation in %post**: `%tmpfiles_create` runs for `flux.conf` so runtime directories exist at install time rather than after the next boot (rpmlint `post-without-tmpfile-creation`)
 - **Lua paths**: Changed from hardcoded `5.3` to wildcard `*` for portability
 - **EPEL 10**: Conditional for `aspell-en` (not available in EPEL 10)
 
@@ -130,6 +131,7 @@ Each package has a `.rpmlintrc` file alongside its spec to suppress known false 
 - **Python path hardcoding**: `%{_libdir}/flux/python*` instead of `%{_libdir}/flux/python3.6/*`
 - **Requires added**: `flux-core >= %{flux_core_minver}` and `python3-pyyaml` (upstream has no explicit Requires)
 - **Macro style**: `%global nopatchversion` instead of `%define nopatchversion`
+- **rc hooks not %config**: the executable `rc1.d`/`rc3.d` fluxion hooks are installed as regular files (rpmlint `executable-marked-as-config-file`)
 
 ### flux-accounting
 
@@ -141,6 +143,7 @@ Each package has a `.rpmlintrc` file alongside its spec to suppress known false 
 - **BuildRequires added**: `gcc-c++` (C++ plugins), `pkgconfig(systemd)`, `systemd-rpm-macros`
 - **`--disable-static` added**: Upstream does not pass `--disable-static` to `%configure`; Fedora adds it
 - **Requires added**: `flux-core >= %{flux_core_minver}` (runtime dependency for Python bindings and plugin)
+- **rc hook not %config**: the executable `rc1.d` priority-update hook is installed as a regular file (rpmlint `executable-marked-as-config-file`)
 
 ## References
 

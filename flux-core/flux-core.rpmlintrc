@@ -14,3 +14,7 @@ addFilter("cross-directory-hard-link")
 
 # flux-python is a wrapper script, manpage is not essential
 addFilter("no-manual-page-for-binary flux-python")
+
+# Upstream fluxometer/conf.lua carries an outdated FSF postal address in its
+# license header; cosmetic upstream issue, not fixable from the packaging side.
+addFilter("incorrect-fsf-address.*fluxometer/conf[.]lua")
