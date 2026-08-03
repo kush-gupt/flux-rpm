@@ -20,9 +20,9 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 
 BuildRequires: pkgconfig(flux-security) >= 0.14
 
-BuildRequires: pkgconfig(libzmq) >= 4.0.4
+BuildRequires: pkgconfig(libzmq) >= 4.2.0
 BuildRequires: pkgconfig(jansson) >= 2.11
-BuildRequires: pkgconfig(hwloc) >= 1.11.1
+BuildRequires: pkgconfig(hwloc) >= 2.1.0
 BuildRequires: pkgconfig(sqlite3) >= 3.6.0
 BuildRequires: pkgconfig(bash-completion)
 BuildRequires: pkgconfig(liblz4)
@@ -266,6 +266,9 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Mon Aug 3 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.87.0-3
+- Bump version requirements for libzmq to 4.2.0 and hwloc to 2.1.0
+
 * Sat Aug 01 2026 Cursor Agent <cursoragent@cursor.com> - 0.87.0-2
 - Run systemd-tmpfiles --create for flux.conf in %%post so runtime
   directories exist at install time instead of after the next boot
