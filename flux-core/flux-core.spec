@@ -20,7 +20,7 @@ Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
 
 BuildRequires: pkgconfig(flux-security) >= 0.14
 
-BuildRequires: pkgconfig(libzmq) >= 4.0.4
+BuildRequires: pkgconfig(libzmq) >= 4.2.0
 BuildRequires: pkgconfig(jansson) >= 2.11
 BuildRequires: pkgconfig(hwloc) >= 1.11.1
 BuildRequires: pkgconfig(sqlite3) >= 3.6.0
