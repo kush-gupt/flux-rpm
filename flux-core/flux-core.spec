@@ -1,6 +1,6 @@
 Name:    flux-core
 Version: 0.87.0
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
