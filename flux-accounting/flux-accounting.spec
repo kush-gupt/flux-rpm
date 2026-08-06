@@ -1,6 +1,6 @@
 Name:    flux-accounting
-Version: 0.59.1
-Release: 2%{?dist}
+Version: 0.60.0
+Release: 1%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-accounting
@@ -109,6 +109,7 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_libexecdir}/flux/cmd/flux-account-service.py
 %{_libexecdir}/flux/cmd/flux-account-fetch-job-records.py
 %{_libexecdir}/flux/cmd/flux-account-update-usage.py
+%{_libexecdir}/flux/cmd/flux-account-fairshare-emulate.py
 
 # rc hook: executable script, so intentionally not %%config (rpmlint
 # executable-marked-as-config-file; stale local edits would break priority
@@ -122,6 +123,15 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man1/*.1*
 
 %changelog
+* Thu Aug 06 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.60.0-1
+- Update to v0.60.0
+- plugin: add option to toggle rejecting unknown queues during job validation
+- commands: add fair-share emulator
+- export-db: add -F/--fairshare-emulate option
+- Fix: update-db: add logging infrastructure
+- Fix: edit-config: remove confirmation prompt
+- Fix: update-db: improve update_columns(), add more logging during database update
+
 * Sat Aug 01 2026 Cursor Agent <cursoragent@cursor.com> - 0.59.1-2
 - Install the rc1.d priority-update hook as a regular file instead of
   %%config (executable scripts must not be config files)
