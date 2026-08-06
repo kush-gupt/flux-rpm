@@ -109,6 +109,7 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_libexecdir}/flux/cmd/flux-account-service.py
 %{_libexecdir}/flux/cmd/flux-account-fetch-job-records.py
 %{_libexecdir}/flux/cmd/flux-account-update-usage.py
+%{_libexecdir}/flux/cmd/flux-account-fairshare-emulate.py
 
 # rc hook: executable script, so intentionally not %%config (rpmlint
 # executable-marked-as-config-file; stale local edits would break priority
