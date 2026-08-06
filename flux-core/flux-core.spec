@@ -1,6 +1,6 @@
 Name:    flux-core
-Version: 0.87.0
-Release: 3%{?dist}
+Version: 0.88.0
+Release: 1%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
@@ -266,6 +266,17 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Thu Aug 06 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.88.0-1
+- Update to v0.88.0
+- job-exec: support reloading with running jobs
+- job-manager: pick up queue config changes on reload
+- add subprocess server caching of output for waitable subprocesses
+- job-exec: handle shell barrier as an RPC
+- libsubprocess: add attach for background processes
+- Fix: pmi: fix possible nonzero exit after abort
+- Fix: libsubprocess: disable input for background subprocesses
+- Fix: job-exec: fix job private namespace checkpoint to survive offline garbage collection
+
 * Mon Aug 3 2026 Sam Maloney <s.maloney@fz-juelich.de> - 0.87.0-3
 - Bump version requirements for libzmq to 4.2.0 and hwloc to 2.1.0
 
