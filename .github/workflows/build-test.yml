@@ -606,9 +606,16 @@ jobs:
 
       - name: Install Flux RPMs
         run: |
-          # Install all non-debug RPMs
-          # Use --skip-broken for Rawhide where library versions may drift
-          dnf install -y --skip-broken \
+          # Install all non-debug RPMs.
+          # --skip-broken is Rawhide-only, where library versions may
+          # drift; the later test steps skip packages that could not be
+          # installed. On stable distros a broken dependency must fail
+          # the job instead of being silently dropped.
+          INSTALL_OPTS=()
+          if [ "${{ matrix.short-name }}" = "rawhide" ]; then
+            INSTALL_OPTS+=(--skip-broken)
+          fi
+          dnf install -y "${INSTALL_OPTS[@]}" \
             rpms/results-security/flux-security-[0-9]*.x86_64.rpm \
             rpms/results-core/flux-core-[0-9]*.x86_64.rpm \
             rpms/results-sched/flux-sched-[0-9]*.x86_64.rpm \
@@ -616,6 +623,14 @@ jobs:
 
           echo "=== Installed Flux packages ==="
           rpm -qa | grep -E '^flux' | sort
+
+          # Belt and braces: assert every package actually installed on
+          # non-Rawhide distros so a partial install can never pass.
+          if [ "${{ matrix.short-name }}" != "rawhide" ]; then
+            for pkg in flux-security flux-core flux-sched flux-accounting; do
+              rpm -q "$pkg" >/dev/null || { echo "::error::$pkg was not installed"; exit 1; }
+            done
+          fi
 
       - name: Setup test environment
         run: |
