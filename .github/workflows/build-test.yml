@@ -158,8 +158,9 @@ jobs:
       - uses: actions/checkout@v7
 
       # Exact key on the sources files, deliberately without
-      # restore-keys: build-srpm.sh hard-fails on checksum mismatch, so
-      # never offer it stale tarballs; a version bump is a clean miss.
+      # restore-keys: a version bump is a clean miss. build-srpm.sh
+      # re-downloads (and only then hard-fails) on checksum mismatch,
+      # so a corrupt cached tarball cannot wedge subsequent runs.
       - name: Cache release tarballs
         uses: actions/cache@v6
         with:

@@ -23,28 +23,45 @@ done
 
 rpmdev-setuptree
 
+# Returns non-zero on SHA256 mismatch; hard-fails only on a missing or
+# incomplete sources file, which no retry can fix.
 verify_checksum() {
     local pkg=$1 ver=$2
     local tarball=~/rpmbuild/SOURCES/${pkg}-${ver}.tar.gz
     local sources_file="$REPO_DIR/${pkg}/sources"
     [ -f "$sources_file" ] || die "Missing sources file: $sources_file"
-    local expected
+    local expected actual
     expected=$(grep -F "(${pkg}-${ver}.tar.gz)" "$sources_file" | awk '{print $4}')
     [ -n "$expected" ] || die "No SHA256 entry for ${pkg}-${ver}.tar.gz in $sources_file"
-    local actual
     actual=$(sha256sum "$tarball" | awk '{print $1}')
-    [ "$actual" = "$expected" ] || die "SHA256 mismatch for ${pkg}-${ver}.tar.gz (expected $expected, got $actual)"
-    log "Verified SHA256 for ${pkg}-${ver}.tar.gz"
+    if [ "$actual" != "$expected" ]; then
+        echo "SHA256 mismatch for ${pkg}-${ver}.tar.gz (expected $expected, got $actual)" >&2
+        return 1
+    fi
 }
 
 download_source() {
     local pkg=$1 ver=$2
     local dest=~/rpmbuild/SOURCES/${pkg}-${ver}.tar.gz
+    local url="https://github.com/flux-framework/${pkg}/releases/download/v${ver}/${pkg}-${ver}.tar.gz"
+
+    # A pre-existing tarball that fails verification (e.g. a partial
+    # download restored from a CI cache) is discarded and fetched fresh
+    # instead of failing every run until the cache entry expires.
+    if [ -f "$dest" ] && ! verify_checksum "$pkg" "$ver"; then
+        log "Existing ${pkg}-${ver}.tar.gz failed verification; re-downloading"
+        rm -f "$dest"
+    fi
+
     if [ ! -f "$dest" ]; then
         log "Downloading ${pkg}-${ver}.tar.gz"
-        wget -q -O "$dest" "https://github.com/flux-framework/${pkg}/releases/download/v${ver}/${pkg}-${ver}.tar.gz"
+        # Remove any partial file on failure so it can't poison a later
+        # run (or the CI tarball cache).
+        wget -q -O "$dest" "$url" || { rm -f "$dest"; die "Failed to download $url"; }
     fi
-    verify_checksum "$pkg" "$ver"
+
+    verify_checksum "$pkg" "$ver" || die "SHA256 verification failed for freshly downloaded ${pkg}-${ver}.tar.gz"
+    log "Verified SHA256 for ${pkg}-${ver}.tar.gz"
 }
 
 build_srpm() {
