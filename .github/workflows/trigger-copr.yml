@@ -25,6 +25,11 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  # Set the COPR_USERNAME repository variable to build into a different
+  # COPR owner's projects; defaults to the upstream maintainer's.
+  COPR_USERNAME: ${{ vars.COPR_USERNAME || 'kushgupta' }}
+
 jobs:
   trigger:
     name: Trigger COPR builds
@@ -59,7 +64,7 @@ jobs:
           cat > ~/.config/copr <<EOF
           [copr-cli]
           login = ${COPR_LOGIN}
-          username = kushgupta
+          username = ${COPR_USERNAME}
           token = ${COPR_TOKEN}
           copr_url = https://copr.fedorainfracloud.org
           EOF
@@ -67,14 +72,27 @@ jobs:
 
       - name: Detect changed packages
         id: detect
+        env:
+          # Passed via env (not interpolated into the script) and
+          # validated against the known package list below.
+          DISPATCH_PACKAGES: ${{ github.event.inputs.packages }}
         run: |
           ALL_PKGS="flux-security flux-core flux-sched flux-accounting"
 
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            INPUT="${{ github.event.inputs.packages }}"
+            INPUT="$DISPATCH_PACKAGES"
             if [ "$INPUT" = "all" ] || [ -z "$INPUT" ]; then
               PKGS="$ALL_PKGS"
             else
+              for pkg in $INPUT; do
+                case " $ALL_PKGS " in
+                  *" $pkg "*) ;;
+                  *)
+                    echo "::error::Unknown package '$pkg' (valid: $ALL_PKGS, or 'all')"
+                    exit 1
+                    ;;
+                esac
+              done
               PKGS="$INPUT"
             fi
           else
@@ -98,7 +116,7 @@ jobs:
           FAILED=0
           for pkg in ${{ steps.detect.outputs.packages }}; do
             echo "::group::Triggering $pkg"
-            if copr-cli build-package --nowait --name "$pkg" "kushgupta/$pkg"; then
+            if copr-cli build-package --nowait --name "$pkg" "${COPR_USERNAME}/$pkg"; then
               echo "Triggered $pkg build successfully"
             else
               echo "::warning::Failed to trigger $pkg build"

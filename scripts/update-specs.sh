@@ -1,7 +1,7 @@
 #!/bin/bash
 # Fetch and update spec files from upstream SRPMs
 # Applies Fedora packaging adaptations as documented in FEDORA_CHANGES.md
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
@@ -19,7 +19,7 @@ get_latest_release() {
     # Note: flux-framework marks all releases as prereleases, so /releases/latest returns 404
     # Instead, fetch from /releases and get the first (most recent) release
     local response
-    response=$(curl -sf "https://api.github.com/repos/flux-framework/$1/releases?per_page=1") || {
+    response=$(curl -sf --retry 3 "https://api.github.com/repos/flux-framework/$1/releases?per_page=1") || {
         echo ""
         return 1
     }
@@ -28,8 +28,10 @@ get_latest_release() {
 
 get_srpm_url() {
     local assets
-    assets=$(curl -s "https://api.github.com/repos/flux-framework/$1/releases/tags/$2")
-    echo "$assets" | jq -r '.assets[] | select(.name | endswith(".src.rpm")) | .browser_download_url' | head -1
+    assets=$(curl -s --retry 3 "https://api.github.com/repos/flux-framework/$1/releases/tags/$2")
+    # A release without SRPM assets is tolerated by the caller, so never
+    # let an unexpected API payload abort the script under pipefail.
+    echo "$assets" | jq -r '.assets[] | select(.name | endswith(".src.rpm")) | .browser_download_url' | head -1 || true
 }
 
 # Apply all Fedora packaging adaptations to an upstream spec file
@@ -196,7 +198,9 @@ apply_fedora_patches() {
 update_package() {
     local pkg=$1 ver=${2:-}
 
-    [ -z "$ver" ] && ver=$(get_latest_release "$pkg")
+    if [ -z "$ver" ]; then
+        ver=$(get_latest_release "$pkg") || true
+    fi
     [ -z "$ver" ] || [ "$ver" = "null" ] && die "Could not get version for $pkg"
 
     log "Updating $pkg to $ver"
@@ -211,7 +215,7 @@ update_package() {
     fi
 
     local srpm_file="${REPO_DIR}/${pkg}.src.rpm"
-    curl -sL -o "$srpm_file" "$srpm_url"
+    curl -sfL --retry 3 -o "$srpm_file" "$srpm_url" || die "Failed to download $srpm_url"
 
     log "Extracting spec from SRPM"
     $CONTAINER_RUNTIME run --rm -v "${REPO_DIR}:/work:Z" fedora:latest \
@@ -225,8 +229,9 @@ update_package() {
     log "$pkg updated to $ver"
 }
 
+VERSION=""
 case "${1:-}" in
-    -v|--version) shift; VERSION="$1"; shift ;;
+    -v|--version) shift; VERSION="${1:?VERSION required after -v/--version}"; shift ;;
 esac
 
 case "${1:-all}" in

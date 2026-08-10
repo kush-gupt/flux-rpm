@@ -1,21 +1,24 @@
 #!/bin/bash
 # Build SRPMs for flux-security, flux-core, flux-sched, and flux-accounting
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
+log() { echo -e "\033[0;32m[INFO]\033[0m $1"; }
+die() { echo -e "\033[0;31m[ERROR]\033[0m $1" >&2; exit 1; }
+
 get_version() {
-    grep '^Version:' "$REPO_DIR/$1/$1.spec" | awk '{print $2}'
+    local ver
+    ver=$(grep '^Version:' "$REPO_DIR/$1/$1.spec" | awk '{print $2}') || true
+    [ -n "$ver" ] || die "Could not determine Version from $1/$1.spec"
+    echo "$ver"
 }
 
 FLUX_SECURITY_VERSION=$(get_version flux-security)
 FLUX_CORE_VERSION=$(get_version flux-core)
 FLUX_SCHED_VERSION=$(get_version flux-sched)
 FLUX_ACCOUNTING_VERSION=$(get_version flux-accounting)
-
-log() { echo -e "\033[0;32m[INFO]\033[0m $1"; }
-die() { echo -e "\033[0;31m[ERROR]\033[0m $1" >&2; exit 1; }
 
 for cmd in rpmbuild rpmdev-setuptree wget sha256sum; do
     command -v "$cmd" &>/dev/null || die "Missing: $cmd"
@@ -31,7 +34,7 @@ verify_checksum() {
     local sources_file="$REPO_DIR/${pkg}/sources"
     [ -f "$sources_file" ] || die "Missing sources file: $sources_file"
     local expected actual
-    expected=$(grep -F "(${pkg}-${ver}.tar.gz)" "$sources_file" | awk '{print $4}')
+    expected=$(grep -F "(${pkg}-${ver}.tar.gz)" "$sources_file" | awk '{print $4}') || true
     [ -n "$expected" ] || die "No SHA256 entry for ${pkg}-${ver}.tar.gz in $sources_file"
     actual=$(sha256sum "$tarball" | awk '{print $1}')
     if [ "$actual" != "$expected" ]; then
@@ -57,7 +60,7 @@ download_source() {
         log "Downloading ${pkg}-${ver}.tar.gz"
         # Remove any partial file on failure so it can't poison a later
         # run (or the CI tarball cache).
-        wget -q -O "$dest" "$url" || { rm -f "$dest"; die "Failed to download $url"; }
+        wget -q --tries=3 -O "$dest" "$url" || { rm -f "$dest"; die "Failed to download $url"; }
     fi
 
     verify_checksum "$pkg" "$ver" || die "SHA256 verification failed for freshly downloaded ${pkg}-${ver}.tar.gz"
