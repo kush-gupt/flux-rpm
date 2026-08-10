@@ -317,8 +317,13 @@ jobs:
 
       # The -bootstrap root cache matters: without it mock reinstalls
       # dnf tooling into a fresh bootstrap chroot on every run (~25s).
-      # v2: key bumped when the bootstrap path was added, so this week's
-      # already-saved v1 entry doesn't block saving the new layout.
+      # v3: podman-era entries only. The docker-era v2 archives restore
+      # but rootless mock rebuilds everything anyway (extracting them as
+      # the non-root runner changes file ownership semantics), and the
+      # weekly exact-key hit meant the usable caches each podman run
+      # built were never saved back - locking CI into a slow state.
+      # Deliberately no v2/v1 fallbacks: restoring one is pure download
+      # cost with no reuse.
       - name: Restore mock root and package caches
         uses: actions/cache@v6
         with:
@@ -326,10 +331,9 @@ jobs:
             /var/cache/mock/${{ matrix.mock-release }}/root_cache
             /var/cache/mock/${{ matrix.mock-release }}-bootstrap/root_cache
             /var/cache/mock/${{ matrix.mock-release }}/dnf_cache
-          key: mock-${{ matrix.mock-release }}-v2-${{ steps.week.outputs.week }}
+          key: mock-${{ matrix.mock-release }}-v3-${{ steps.week.outputs.week }}
           restore-keys: |
-            mock-${{ matrix.mock-release }}-v2-
-            mock-${{ matrix.mock-release }}-
+            mock-${{ matrix.mock-release }}-v3-
 
       - name: Restore compiler cache (ccache)
         uses: actions/cache@v6
@@ -358,6 +362,13 @@ jobs:
               && rpm -q nosync >/dev/null 2>&1 \
               || dnf install -y mock rpmlint nosync
           '
+
+          # The restored ccache tree is extracted by the non-root runner,
+          # so inside the container it is owned by ns-root; open it up so
+          # the unprivileged chroot build users can read and write it
+          # (otherwise every compile is a ccache miss).
+          podman exec mockbuilder bash -c \
+            'd="/var/cache/mock/${{ matrix.mock-release }}/ccache"; ! [ -d "$d" ] || chmod -R a+rwX "$d"'
 
       - name: Configure mock caching
         run: |
@@ -634,10 +645,13 @@ jobs:
 
       # Chroot builds write ccache/dnf files as subuid-mapped users;
       # map everything back to the runner user so the post-job cache
-      # save (which runs on the host) can read the tree.
+      # save (which runs on the host) can read the tree. Failures are
+      # surfaced (but non-fatal) since they degrade the next run's cache.
       - name: Normalize cache ownership for save
         if: always()
-        run: podman unshare chown -R 0:0 /var/cache/mock 2>/dev/null || true
+        run: |
+          podman unshare chown -R 0:0 /var/cache/mock || \
+            echo "::warning::cache ownership normalization failed; next run's cache may be incomplete"
 
   # ============================================================
   # Smoke Tests - Basic verification that installed RPMs work
