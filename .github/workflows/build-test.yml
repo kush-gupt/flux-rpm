@@ -310,10 +310,16 @@ jobs:
         id: week
         run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare mock cache directory
+      # /var/cache/mock holds the persisted caches; /var/lib/mock holds
+      # the live chroots. Both are bind-mounted into the build container
+      # from the host: keeping the chroots (the hottest I/O path: package
+      # installs, configure's thousands of small file ops, build trees)
+      # off the container's overlay graph measurably speeds up builds
+      # (~20% on a warm flux-security rebuild in local testing).
+      - name: Prepare mock host directories
         run: |
-          sudo mkdir -p /var/cache/mock
-          sudo chown "$(id -u):$(id -g)" /var/cache/mock
+          sudo mkdir -p /var/cache/mock /var/lib/mock
+          sudo chown "$(id -u):$(id -g)" /var/cache/mock /var/lib/mock
 
       # The -bootstrap root cache matters: without it mock reinstalls
       # dnf tooling into a fresh bootstrap chroot on every run (~25s).
@@ -351,6 +357,7 @@ jobs:
           podman run -d --name mockbuilder --privileged \
             -v "$PWD:/work" -w /work \
             -v /var/cache/mock:/var/cache/mock \
+            -v /var/lib/mock:/var/lib/mock \
             "$BUILD_IMAGE" sleep infinity
 
           # Builder image ships these already; the fedora:latest
@@ -635,13 +642,11 @@ jobs:
             !results-*/*-debuginfo-*.rpm
             !results-*/*-debugsource-*.rpm
 
+      # No 'mock --clean' first: the runner VM is discarded after the
+      # job, so scrubbing the chroots is pure wasted time (~5s).
       - name: Cleanup build container
         if: always()
-        run: |
-          # Clean up the mock chroots, then the container itself
-          podman exec mockbuilder mock -r ${{ matrix.mock-release }} --clean 2>/dev/null || true
-          podman exec mockbuilder mock -r ${{ matrix.mock-release }} --uniqueext=accounting --clean 2>/dev/null || true
-          podman rm -f -t 0 mockbuilder 2>/dev/null || true
+        run: podman rm -f -t 0 mockbuilder 2>/dev/null || true
 
       # Chroot builds write ccache/dnf files as subuid-mapped users;
       # map everything back to the runner user so the post-job cache
