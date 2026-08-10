@@ -24,9 +24,15 @@ jobs:
         with:
           fetch-depth: 2
 
+      # Secrets are passed as environment variables rather than being
+      # interpolated into the script body, so they are never embedded in
+      # the generated shell script.
       - name: Validate COPR secrets
+        env:
+          COPR_LOGIN: ${{ secrets.COPR_LOGIN }}
+          COPR_TOKEN: ${{ secrets.COPR_TOKEN }}
         run: |
-          if [ -z "${{ secrets.COPR_LOGIN }}" ] || [ -z "${{ secrets.COPR_TOKEN }}" ]; then
+          if [ -z "$COPR_LOGIN" ] || [ -z "$COPR_TOKEN" ]; then
             echo "::error::COPR_LOGIN and COPR_TOKEN secrets must be configured. See https://copr.fedorainfracloud.org/api/"
             exit 1
           fi
@@ -35,15 +41,19 @@ jobs:
         run: pip install copr-cli==2.5
 
       - name: Configure copr-cli
+        env:
+          COPR_LOGIN: ${{ secrets.COPR_LOGIN }}
+          COPR_TOKEN: ${{ secrets.COPR_TOKEN }}
         run: |
           mkdir -p ~/.config
           cat > ~/.config/copr <<EOF
           [copr-cli]
-          login = ${{ secrets.COPR_LOGIN }}
+          login = ${COPR_LOGIN}
           username = kushgupta
-          token = ${{ secrets.COPR_TOKEN }}
+          token = ${COPR_TOKEN}
           copr_url = https://copr.fedorainfracloud.org
           EOF
+          chmod 600 ~/.config/copr
 
       - name: Detect changed packages
         id: detect
