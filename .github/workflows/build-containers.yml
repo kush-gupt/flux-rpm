@@ -73,8 +73,9 @@ jobs:
       - name: Test container image
         if: github.event_name != 'pull_request'
         run: |
-          # Use the 'latest' tag for main branch, otherwise use short SHA
-          IMAGE_TAG="${{ github.ref_name == 'main' && 'latest' || github.sha }}"
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${IMAGE_TAG} \
+          # Pull by digest: the tags vary by trigger (metadata-action tags
+          # with the *short* SHA, not github.sha), so the digest from the
+          # build step is the only reference that is always correct.
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }} \
             bash -c "rpm --version && rpmlint --version && mock --version"
 
