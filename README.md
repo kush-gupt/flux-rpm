@@ -75,6 +75,7 @@ Source tarballs are verified against the SHA256 checksum in each package's `sour
 - Daily checks for new upstream releases
 - Automatic PR creation when new versions are available
 - COPR rebuilds triggered automatically on merge to `main`
+- All CI container work runs in rootless Podman (mock builds, spec lint, smoke tests, and the builder image itself, which is built and tested before it is pushed) — no Docker daemon involved
 - Mock chroot/package caches and ccache persist across CI runs via GitHub Actions cache, so repeat builds skip most chroot setup, package downloads, and compilation (on EL9, cmake builds route the gcc-toolset compiler through ccache via `CMAKE_*_COMPILER_LAUNCHER`); smoke tests likewise reuse a cached dnf package cache
 
 ## Repository Structure
