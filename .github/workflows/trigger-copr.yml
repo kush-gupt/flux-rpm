@@ -15,6 +15,16 @@ on:
         required: false
         default: 'all'
 
+# Queue overlapping trigger runs instead of cancelling: a cancelled run
+# could skip a COPR rebuild for a merged change.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# The job only reads the repo; COPR access comes from repo secrets.
+permissions:
+  contents: read
+
 jobs:
   trigger:
     name: Trigger COPR builds

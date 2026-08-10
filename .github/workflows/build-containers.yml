@@ -16,6 +16,11 @@ on:
   schedule:
     - cron: '0 3 * * 0'
 
+# One image build at a time per ref; a superseded build is safe to cancel
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/flux-rpm-builder
