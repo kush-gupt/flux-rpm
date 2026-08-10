@@ -354,6 +354,18 @@ jobs:
       # (verified: full chroot init + SRPM rebuild work rootless).
       - name: Start build container
         run: |
+          # Explicit pull with spaced retries: registries occasionally
+          # black out for minutes at a time, and podman's three built-in
+          # retries are only ~1s apart.
+          for attempt in 1 2 3 4; do
+            podman pull "$BUILD_IMAGE" && break
+            if [ "$attempt" = "4" ]; then
+              echo "::error::failed to pull $BUILD_IMAGE after 4 attempts"
+              exit 1
+            fi
+            echo "pull failed (attempt $attempt); retrying in $((attempt * 30))s"
+            sleep $((attempt * 30))
+          done
           podman run -d --name mockbuilder --privileged \
             -v "$PWD:/work" -w /work \
             -v /var/cache/mock:/var/cache/mock \
@@ -724,6 +736,18 @@ jobs:
 
       - name: Start distro container
         run: |
+          # Explicit pull with spaced retries: registries occasionally
+          # black out for minutes at a time, and podman's three built-in
+          # retries are only ~1s apart.
+          for attempt in 1 2 3 4; do
+            podman pull ${{ matrix.image }} && break
+            if [ "$attempt" = "4" ]; then
+              echo "::error::failed to pull ${{ matrix.image }} after 4 attempts"
+              exit 1
+            fi
+            echo "pull failed (attempt $attempt); retrying in $((attempt * 30))s"
+            sleep $((attempt * 30))
+          done
           podman run -d --name smoke \
             -v "$PWD:/work" -w /work \
             -v /var/cache/dnf:/var/cache/dnf \
