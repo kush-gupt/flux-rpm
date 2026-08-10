@@ -158,7 +158,14 @@ jobs:
     steps:
       - id: check
         run: |
-          if docker manifest inspect ${{ env.BUILDER_IMAGE }} > /dev/null 2>&1; then
+          # skopeo checks the remote manifest without a Docker daemon
+          # (the docker:// prefix is skopeo's registry transport, not
+          # the Docker engine). Preinstalled on ubuntu-latest runners;
+          # the guard covers future runner image changes.
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y skopeo
+          fi
+          if skopeo inspect --raw "docker://${{ env.BUILDER_IMAGE }}" > /dev/null 2>&1; then
             echo "image=${{ env.BUILDER_IMAGE }}" >> "$GITHUB_OUTPUT"
           else
             echo "image=fedora:latest" >> "$GITHUB_OUTPUT"

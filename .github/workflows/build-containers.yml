@@ -33,54 +33,83 @@ jobs:
       contents: read
       packages: write
     outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
-      image-digest: ${{ steps.build.outputs.digest }}
+      image-tags: ${{ steps.meta.outputs.tags }}
+      image-digest: ${{ steps.push.outputs.digest }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+      # Podman builds run rootless and daemonless: no Docker daemon or
+      # buildx builder to start, and no root-owned build process.
+      # ubuntu-latest runners ship podman preinstalled; the guard covers
+      # future runner image changes.
+      - name: Ensure podman is available
+        run: |
+          if ! command -v podman >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y podman
+          fi
+          podman --version
+
+      # Same tag set docker/metadata-action produced: branch name or
+      # pr-N, the short commit SHA, and 'latest' on the default branch.
+      - name: Compute image tags
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            TAGS="pr-${{ github.event.number }} ${GITHUB_SHA:0:7}"
+          else
+            TAGS="${GITHUB_REF_NAME//\//-} ${GITHUB_SHA:0:7}"
+            if [ "$GITHUB_REF_NAME" = "${{ github.event.repository.default_branch }}" ]; then
+              TAGS="$TAGS latest"
+            fi
+          fi
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
+          echo "primary=${TAGS%% *}" >> "$GITHUB_OUTPUT"
+          echo "Will tag: $TAGS"
+
+      # No layer-cache export: the image is one dnf-install layer that
+      # the weekly rebuild exists to refresh, and the previous
+      # cache-to: gha,mode=max export pushed the full layer set into the
+      # shared 10 GB actions/cache budget that the mock and ccache
+      # caches in build-test.yml rely on.
+      - name: Build image
+        run: |
+          TAG_ARGS=()
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            TAG_ARGS+=(-t "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$tag")
+          done
+          podman build \
+            --file .github/containers/Dockerfile.builder \
+            --label "org.opencontainers.image.revision=${{ github.sha }}" \
+            --label "org.opencontainers.image.created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            "${TAG_ARGS[@]}" \
+            .github/containers
+
+      # Test before pushing (and on pull requests, which never push):
+      # a broken image can no longer reach GHCR.
+      - name: Test container image
+        run: |
+          podman run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.primary }} \
+            bash -c "rpm --version && rpmlint --version && mock --version"
 
       - name: Log in to Container Registry
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          podman login ${{ env.REGISTRY }} \
+            --username "${{ github.actor }}" \
+            --password-stdin <<< "$REGISTRY_TOKEN"
 
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
-        id: build
-        uses: docker/build-push-action@v7
-        with:
-          context: .github/containers
-          file: .github/containers/Dockerfile.builder
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64
-
-      - name: Test container image
+      - name: Push image
+        id: push
         if: github.event_name != 'pull_request'
         run: |
-          # Pull by digest: the tags vary by trigger (metadata-action tags
-          # with the *short* SHA, not github.sha), so the digest from the
-          # build step is the only reference that is always correct.
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }} \
-            bash -c "rpm --version && rpmlint --version && mock --version"
-
+          DIGEST_FILE=$(mktemp)
+          for tag in ${{ steps.meta.outputs.tags }}; do
+            podman push --digestfile "$DIGEST_FILE" \
+              "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:$tag"
+          done
+          echo "digest=$(cat "$DIGEST_FILE")" >> "$GITHUB_OUTPUT"
+          echo "Pushed digest: $(cat "$DIGEST_FILE")"
