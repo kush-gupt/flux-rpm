@@ -40,7 +40,7 @@ jobs:
   # ============================================================
   spelling:
     name: Spelling check
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Check Spelling
@@ -50,7 +50,7 @@ jobs:
 
   shellcheck:
     name: Shellcheck
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Run shellcheck on scripts
@@ -62,7 +62,7 @@ jobs:
 
   lint:
     name: Lint spec files
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Run rpmlint on all spec files (Fedora container)
@@ -96,7 +96,7 @@ jobs:
 
   spec-validation:
     name: Validate spec files
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@v7
       - name: Start Fedora container
@@ -171,7 +171,7 @@ jobs:
   # Check container availability (fast, parallel)
   check-container:
     name: Check container
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       image: ${{ steps.check.outputs.image }}
     steps:
@@ -196,7 +196,7 @@ jobs:
   # from starting.
   build-srpms:
     name: Build SRPMs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [spelling, shellcheck, lint, spec-validation, check-container]
     env:
       BUILD_IMAGE: ${{ needs.check-container.outputs.image }}
@@ -253,7 +253,7 @@ jobs:
   # the complex integration tests (was 6+ hours) in favor of simple smoke tests.
   build-all:
     name: Build (${{ matrix.distro }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [build-srpms, check-container]
     # Generous ceiling for a cold-cache mock run (security -> core ->
     # sched/accounting); prevents a hung mock from burning 6h of runner.
@@ -675,7 +675,7 @@ jobs:
   # ============================================================
   smoke-test:
     name: Smoke Test (${{ matrix.distro }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     needs: [build-all]
     timeout-minutes: 30
     # Don't let rawhide failures fail the entire workflow
