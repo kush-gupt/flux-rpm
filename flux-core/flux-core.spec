@@ -1,6 +1,6 @@
 Name:    flux-core
 Version: 0.88.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
@@ -58,6 +58,11 @@ Requires: lua-posix
 Requires: python3-cffi >= %{cffi_minver}
 Requires: python3-pyyaml >= %{pyyaml_minver}
 Requires: python3-ply >= %{ply_minver}
+
+# The python3-flux subpackage was merged into the main package in
+# 0.81.0-3; replace any orphaned copy left over from older builds
+Obsoletes: python3-flux < 0.81.0-3
+Provides:  python3-flux = %{version}-%{release}
 
 BuildRequires: python3-devel >= 3.6
 BuildRequires: python3-cffi >= %{cffi_minver}
@@ -266,6 +271,10 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Mon Aug 10 2026 Cursor Agent <cursoragent@cursor.com> - 0.88.0-2
+- Add Obsoletes/Provides for the python3-flux subpackage merged into the
+  main package in 0.81.0-3, so upgrades replace the orphaned package
+
 * Thu Aug 06 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.88.0-1
 - Update to v0.88.0
 - job-exec: support reloading with running jobs
