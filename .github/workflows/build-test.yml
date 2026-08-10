@@ -131,10 +131,22 @@ jobs:
 
       - name: Check changelog format
         run: |
+          # Every entry header must match the Fedora format:
+          #   * Day Mon DD YYYY Name <email> - version-release
+          # (including the hyphen before version-release, which the
+          # upstream LLNL specs omit).
           for spec in flux-*/flux-*.spec; do
             echo "Checking changelog in: $spec"
-            # Extract changelog and verify format
-            sed -n '/%changelog/,$ p' "$spec" | head -5
+            BAD=$(sed -n '/%changelog/,$ p' "$spec" | grep -E '^\* ' | \
+              grep -vE '^\* (Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +[0-9]{1,2} [0-9]{4} .+ - [^ ]+$' || true)
+            if [ -n "$BAD" ]; then
+              echo "::error::Malformed changelog entry header(s) in $spec:"
+              echo "$BAD"
+              exit 1
+            fi
+            echo "  Latest entry:"
+            sed -n '/%changelog/,$ p' "$spec" | sed -n '2p'
+            echo "  ✓ all entry headers well-formed"
           done
 
   # Check container availability (fast, parallel)
