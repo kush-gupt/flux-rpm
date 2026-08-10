@@ -87,5 +87,6 @@ jobs:
             echo "::endgroup::"
           done
           if [ "$FAILED" -ne 0 ]; then
-            echo "::warning::Some COPR builds failed to trigger. Check warnings above."
+            echo "::error::Some COPR builds failed to trigger. Check warnings above."
+            exit 1
           fi
