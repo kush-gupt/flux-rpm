@@ -1,6 +1,6 @@
 Name:    flux-sched
-Version: 0.53.0
-Release: 3%{?dist}
+Version: 0.54.0
+Release: 1%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-sched
@@ -128,6 +128,13 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
+* Tue Aug 11 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.54.0-1
+- Update to v0.54.0
+- Add match_without_allocating match option
+- qmanager: annotate jobs with sched.selection_type and update t_estimate for jobs
+- traverser: support fractional durations
+- Fix: dfu: Stop implicit subplan initialization for non-mutating match traversals
+
 * Mon Aug 10 2026 Cursor Agent <cursoragent@cursor.com> - 0.53.0-3
 - Drop BuildRequires only used by 'make check' (aspell, aspell-en,
   hostname, man-db, jq, which, file, gdb); the %%check section does not
