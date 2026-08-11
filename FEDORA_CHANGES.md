@@ -109,7 +109,10 @@ Each package has a `.rpmlintrc` file alongside its spec to suppress known false 
 - **Custom preun**: Stops `flux.service` gracefully before upgrade/removal, with `2>/dev/null` on systemctl check
 - **tmpfiles creation in %post**: `%tmpfiles_create` runs for `flux.conf` so runtime directories exist at install time rather than after the next boot (rpmlint `post-without-tmpfile-creation`)
 - **Lua paths**: Changed from hardcoded `5.3` to wildcard `*` for portability
-- **EPEL 10**: Conditional for `aspell-en` (not available in EPEL 10)
+- **Bundled libev declared**: `Provides: bundled(libev) = 4.33` for the embedded copy in `src/common/libev`, per the Fedora bundling guidelines
+- **python3-flux upgrade path**: `Obsoletes: python3-flux < 0.81.0-3` plus `Provides: python3-flux` in the main package, so upgrades replace the subpackage that was merged in 0.81.0-3
+- **Check-only BuildRequires dropped**: `aspell`/`aspell-en` (with its EPEL 10 conditional), `hostname`, `man-db`, `jq`, `which`, `procps-ng` removed because `%check` does not run tests in mock; `file` is kept for the rpath removal in `%install`
+- **Explicit %files entries**: tmpfiles config and systemd units are listed by name instead of `%{_tmpfilesdir}/*` / `%{_unitdir}/*.service` globs
 
 ### flux-security
 
@@ -132,6 +135,7 @@ Each package has a `.rpmlintrc` file alongside its spec to suppress known false 
 - **Requires added**: `flux-core >= %{flux_core_minver}` and `python3-pyyaml` (upstream has no explicit Requires)
 - **Macro style**: `%global nopatchversion` instead of `%define nopatchversion`
 - **rc hooks not %config**: the executable `rc1.d`/`rc3.d` fluxion hooks are installed as regular files (rpmlint `executable-marked-as-config-file`)
+- **Check-only BuildRequires dropped**: `aspell`, `aspell-en`, `hostname`, `man-db`, `jq`, `which`, `file`, `gdb` removed because `%check` does not run tests in mock
 
 ### flux-accounting
 

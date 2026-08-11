@@ -37,19 +37,6 @@ BuildRequires: python3-sphinx
 BuildRequires: python3-sphinx_rtd_theme
 BuildRequires: python3-jsonschema >= 2.3.0
 
-# Required for 'make check'
-BuildRequires: aspell
-# aspell-en is not available in EPEL 10
-%if 0%{?fedora} || 0%{?rhel} < 10
-BuildRequires: aspell-en
-%endif
-BuildRequires: hostname
-BuildRequires: man-db
-BuildRequires: jq
-BuildRequires: which
-BuildRequires: file
-BuildRequires: gdb
-
 # Required for en_US.UTF-8 locale during build
 BuildRequires: glibc-langpack-en
 
@@ -147,6 +134,11 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 - qmanager: annotate jobs with sched.selection_type and update t_estimate for jobs
 - traverser: support fractional durations
 - Fix: dfu: Stop implicit subplan initialization for non-mutating match traversals
+
+* Mon Aug 10 2026 Cursor Agent <cursoragent@cursor.com> - 0.53.0-3
+- Drop BuildRequires only used by 'make check' (aspell, aspell-en,
+  hostname, man-db, jq, which, file, gdb); the %%check section does not
+  run tests
 
 * Sat Aug 01 2026 Cursor Agent <cursoragent@cursor.com> - 0.53.0-2
 - Install rc1.d/rc3.d fluxion hooks as regular files instead of %%config

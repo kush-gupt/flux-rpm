@@ -1,6 +1,6 @@
 Name:    flux-core
 Version: 0.88.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
@@ -40,24 +40,24 @@ BuildRequires: systemd-rpm-macros
 # for chrpath
 BuildRequires: chrpath
 
-# requirements specifically for 'make check'
-BuildRequires: aspell
-# aspell-en is not available in EPEL 10
-%if 0%{?fedora} || 0%{?rhel} < 10
-BuildRequires: aspell-en
-%endif
-BuildRequires: hostname
-BuildRequires: man-db
-BuildRequires: jq
-BuildRequires: which
+# file(1) classifies ELF binaries during rpath removal in %%install
 BuildRequires: file
-BuildRequires: procps-ng
 
 # rely on autoreq for most dependencies
 Requires: lua-posix
 Requires: python3-cffi >= %{cffi_minver}
 Requires: python3-pyyaml >= %{pyyaml_minver}
 Requires: python3-ply >= %{ply_minver}
+
+# The python3-flux subpackage was merged into the main package in
+# 0.81.0-3; replace any orphaned copy left over from older builds
+Obsoletes: python3-flux < 0.81.0-3
+Provides:  python3-flux = %{version}-%{release}
+
+# flux-core builds an embedded copy of libev (src/common/libev); the
+# Fedora bundling guidelines require declaring it. Check the version
+# (EV_VERSION_MAJOR/MINOR in src/common/libev/ev.h) on version bumps.
+Provides: bundled(libev) = 4.33
 
 BuildRequires: python3-devel >= 3.6
 BuildRequires: python3-cffi >= %{cffi_minver}
@@ -209,7 +209,7 @@ fi
 %{_datadir}/flux
 
 # tmpfiles config
-%{_tmpfilesdir}/*
+%{_tmpfilesdir}/flux.conf
 
 # cronfiles
 %dir %{_sysconfdir}/flux/system
@@ -237,7 +237,10 @@ fi
 %dir %{_sysconfdir}/flux/modprobe/rc3.d
 
 # systemd unit file(s)
-%{_unitdir}/*.service
+%{_unitdir}/flux.service
+%{_unitdir}/flux-housekeeping@.service
+%{_unitdir}/flux-prolog@.service
+%{_unitdir}/flux-epilog@.service
 
 # shell
 %dir %{_sysconfdir}/flux/shell
@@ -266,6 +269,16 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Mon Aug 10 2026 Cursor Agent <cursoragent@cursor.com> - 0.88.0-2
+- Add Obsoletes/Provides for the python3-flux subpackage merged into the
+  main package in 0.81.0-3, so upgrades replace the orphaned package
+- Declare Provides: bundled(libev) = 4.33 per the bundling guidelines
+- Drop BuildRequires only used by 'make check' (aspell, aspell-en,
+  hostname, man-db, jq, which, procps-ng); the %%check section does not
+  run tests. Keep file, which the rpath removal in %%install uses
+- Replace wildcard tmpfiles/systemd-unit globs in %%files with explicit
+  file lists
+
 * Thu Aug 06 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.88.0-1
 - Update to v0.88.0
 - job-exec: support reloading with running jobs
