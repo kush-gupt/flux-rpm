@@ -53,7 +53,7 @@ jobs:
           echo "Current version: $current"
           echo "current=$current" >> $GITHUB_OUTPUT
 
-          # A failed or unparseable release lookup fails the job: exiting
+          # A failed or unparsable release lookup fails the job: exiting
           # 0 here used to hide rate-limit errors behind a green run.
           response=$(curl -sf --retry 3 \
             -H "Authorization: Bearer ${GH_TOKEN}" \
@@ -69,12 +69,43 @@ jobs:
           fi
           echo "Latest version: $latest"
 
-          if [ "$current" != "$latest" ]; then
-            echo "latest=$latest" >> $GITHUB_OUTPUT
-            echo "Update available: $current -> $latest"
-          else
-            echo "No update available (current: $current)"
+          # The tag flows into sed scripts, the changelog, branch names
+          # and URLs below; refuse anything that is not a plain dotted
+          # version.
+          if ! echo "$latest" | grep -Eq '^[0-9]+(\.[0-9]+)*$'; then
+            echo "::error::Unexpected release tag format: v${latest}"
+            exit 1
           fi
+
+          if [ "$current" = "$latest" ]; then
+            echo "No update available (current: $current)"
+            exit 0
+          fi
+
+          # Only ever move forward: /releases returns the most recently
+          # published release, which can be a patch release for an older
+          # series (e.g. 0.53.1 published after 0.54.0 is packaged).
+          if [ "$(printf '%s\n%s\n' "$current" "$latest" | sort -V | tail -n1)" != "$latest" ]; then
+            echo "Latest release ($latest) sorts below packaged version ($current); skipping"
+            exit 0
+          fi
+
+          # Leave an existing, still-mergeable update PR alone.
+          # Regenerating it every day only changes the changelog date,
+          # which force-pushes the branch (discarding any fixes a
+          # reviewer pushed to it) and burns a full build matrix. A
+          # CONFLICTING PR (e.g. #94, generated moments before an
+          # unrelated spec change landed on main) is regenerated from
+          # the current main instead.
+          mergeable=$(gh pr list --head "update-${PACKAGE}-${latest}" --state open \
+            --json mergeable --jq '.[0].mergeable // empty')
+          if [ -n "$mergeable" ] && [ "$mergeable" != "CONFLICTING" ]; then
+            echo "Open PR for update-${PACKAGE}-${latest} already exists (mergeable: ${mergeable}); skipping"
+            exit 0
+          fi
+
+          echo "latest=$latest" >> $GITHUB_OUTPUT
+          echo "Update available: $current -> $latest"
 
       - name: Generate changelog from upstream NEWS
         if: steps.check.outputs.latest != ''
@@ -83,7 +114,7 @@ jobs:
           VERSION="${{ steps.check.outputs.latest }}"
           PACKAGE="${{ matrix.package }}"
 
-          NEWS=$(curl -sf "https://raw.githubusercontent.com/flux-framework/${PACKAGE}/v${VERSION}/NEWS.md") || {
+          NEWS=$(curl -sf --retry 3 "https://raw.githubusercontent.com/flux-framework/${PACKAGE}/v${VERSION}/NEWS.md") || {
             echo "::warning::Could not fetch NEWS.md, using minimal changelog"
             echo "- Update to v${VERSION}" > /tmp/changelog_entries.txt
             { echo "entries<<CHANGELOG_EOF"; cat /tmp/changelog_entries.txt; echo "CHANGELOG_EOF"; } >> $GITHUB_OUTPUT
@@ -160,6 +191,10 @@ jobs:
             fi
           } > /tmp/changelog_entries.txt
 
+          # rpmbuild expands %macros inside %changelog too; escape any
+          # literal % from the upstream notes (e.g. "50% faster").
+          sed -i 's/%/%%/g' /tmp/changelog_entries.txt
+
           echo "Generated changelog entries:"
           cat /tmp/changelog_entries.txt
 
@@ -167,6 +202,11 @@ jobs:
 
       - name: Update spec and sources
         if: steps.check.outputs.latest != ''
+        env:
+          # Derived from the upstream NEWS.md: third-party text, so hand
+          # it to the script through the environment instead of
+          # interpolating it into the script source.
+          ENTRIES: ${{ steps.changelog.outputs.entries }}
         run: |
           VERSION="${{ steps.check.outputs.latest }}"
           PACKAGE="${{ matrix.package }}"
@@ -216,9 +256,7 @@ jobs:
           {
             echo "%changelog"
             echo "* ${DATE} github-actions[bot] <github-actions[bot]@users.noreply.github.com> - ${VERSION}-1"
-            cat <<'ENTRIES_EOF'
-          ${{ steps.changelog.outputs.entries }}
-          ENTRIES_EOF
+            printf '%s\n' "$ENTRIES"
             cat /tmp/dropped_patches.txt
             echo ""
             sed -n '/%changelog/,$ { /%changelog/d; p }' "$SPEC"
@@ -233,7 +271,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TITLE="Update ${{ matrix.package }} to ${{ steps.check.outputs.latest }}"
-          EXISTING=$(gh issue list --search "$TITLE" --state open --json number --jq '.[0].number // empty')
+          # 'gh issue list --search' is a fuzzy match; require the exact
+          # title so e.g. a 0.54.0 issue is never reused for 0.54.0.1.
+          EXISTING=$(gh issue list --search "\"$TITLE\" in:title" --state open --json number,title \
+            | jq -r --arg title "$TITLE" '[.[] | select(.title == $title)][0].number // empty')
           if [ -n "$EXISTING" ]; then
             echo "issue-number=$EXISTING" >> "$GITHUB_OUTPUT"
             echo "Reusing existing issue #$EXISTING"
@@ -266,6 +307,7 @@ jobs:
             Automated version bump for ${{ matrix.package }} from ${{ steps.check.outputs.current }} to ${{ steps.check.outputs.latest }}.
 
             Release: https://github.com/flux-framework/${{ matrix.package }}/releases/tag/v${{ steps.check.outputs.latest }}
+            Upstream changes: https://github.com/flux-framework/${{ matrix.package }}/compare/v${{ steps.check.outputs.current }}...v${{ steps.check.outputs.latest }}
 
             Closes #${{ steps.create-issue.outputs.issue-number }}
 
@@ -278,10 +320,30 @@ jobs:
           delete-branch: true
 
       - name: Trigger build CI on PR branch
-        if: steps.create-pr.outputs.pull-request-number
+        # Only when this run actually created or refreshed the PR;
+        # 'none' means the branch content was already up to date.
+        if: >-
+          steps.create-pr.outputs.pull-request-operation == 'created' ||
+          steps.create-pr.outputs.pull-request-operation == 'updated'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="update-${{ matrix.package }}-${{ steps.check.outputs.latest }}"
+          HEAD_SHA="${{ steps.create-pr.outputs.pull-request-head-sha }}"
+
+          # PRs opened with the repo GITHUB_TOKEN are documented not to
+          # start pull_request workflows, but in practice these update
+          # PRs do get one (see #94: the dispatched run and a
+          # pull_request run built the same commit twice). Give the
+          # event a moment to materialize and dispatch only if no run
+          # showed up, so each update is built exactly once either way.
+          sleep 30
+          existing=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/build-test.yml/runs?event=pull_request&head_sha=${HEAD_SHA}" \
+            --jq '.total_count')
+          if [ "${existing:-0}" -gt 0 ]; then
+            echo "build-test already triggered for ${HEAD_SHA} by the pull_request event; skipping dispatch"
+            exit 0
+          fi
           echo "Triggering Build and Test RPMs on branch: $BRANCH"
           gh workflow run build-test.yml --ref "$BRANCH"
