@@ -20,6 +20,17 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Least-privilege token: this workflow only reads the repo and pulls
+# the builder image from GHCR.
+permissions:
+  contents: read
+  packages: read
+
+# Container work runs through rootless podman (preinstalled on
+# ubuntu-latest runners) instead of the runner's Docker-based
+# 'container:' job feature: no Docker daemon involvement, and the same
+# semantics via 'podman run'/'podman exec' with the workspace mounted
+# at /work.
 env:
   BUILDER_IMAGE: ghcr.io/${{ github.repository }}/flux-rpm-builder:latest
 
@@ -52,19 +63,18 @@ jobs:
   lint:
     name: Lint spec files
     runs-on: ubuntu-latest
-    container:
-      image: fedora:latest
     steps:
       - uses: actions/checkout@v7
-      - name: Install rpmlint
-        run: dnf install -y rpmlint glibc-langpack-en
-
-      - name: Run rpmlint on all spec files
+      - name: Run rpmlint on all spec files (Fedora container)
         run: |
           # rpmlint 2 automatically picks up each package's <pkg>.rpmlintrc
           # from the directory next to the spec file it is checking.
           # Warnings are allowed; any rpmlint error (" E: " line) fails the
           # job. Built RPMs get their own rpmlint pass in the build-all job.
+          podman run --rm -i -v "$PWD:/work" -w /work fedora:latest bash -s <<'EOF'
+          set -euo pipefail
+          dnf install -y rpmlint glibc-langpack-en
+
           FAILED=0
           for pkg in flux-security flux-core flux-sched flux-accounting; do
             echo "=== Linting $pkg.spec ==="
@@ -82,27 +92,34 @@ jobs:
             exit 1
           fi
           echo "=== All spec files linted: no rpmlint errors (warnings allowed) ==="
+          EOF
 
   spec-validation:
     name: Validate spec files
     runs-on: ubuntu-latest
-    container:
-      image: fedora:latest
     steps:
       - uses: actions/checkout@v7
-      - name: Install rpmspec
-        run: dnf install -y rpm-build glibc-langpack-en
+      - name: Start Fedora container
+        run: |
+          podman run -d --name speccheck -v "$PWD:/work" -w /work \
+            fedora:latest sleep infinity
+          podman exec speccheck dnf install -y rpm-build glibc-langpack-en
 
       - name: Validate spec file syntax
         run: |
+          podman exec -i speccheck bash -s <<'EOF'
+          set -euo pipefail
           for spec in flux-*/flux-*.spec; do
             echo "Validating: $spec"
             rpmspec -P "$spec" > /dev/null
             echo "  ✓ $spec is valid"
           done
+          EOF
 
       - name: Check required spec fields
         run: |
+          podman exec -i speccheck bash -s <<'EOF'
+          set -euo pipefail
           for spec in flux-*/flux-*.spec; do
             echo "Checking required fields in: $spec"
 
@@ -122,14 +139,34 @@ jobs:
 
             echo "  ✓ $spec has all required fields"
           done
+          EOF
 
       - name: Check changelog format
         run: |
+          # Every entry header must match the Fedora format:
+          #   * Day Mon DD YYYY Name <email> - version-release
+          # (including the hyphen before version-release, which the
+          # upstream LLNL specs omit).
+          podman exec -i speccheck bash -s <<'EOF'
+          set -euo pipefail
           for spec in flux-*/flux-*.spec; do
             echo "Checking changelog in: $spec"
-            # Extract changelog and verify format
-            sed -n '/%changelog/,$ p' "$spec" | head -5
+            BAD=$(sed -n '/%changelog/,$ p' "$spec" | grep -E '^\* ' | \
+              grep -vE '^\* (Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +[0-9]{1,2} [0-9]{4} .+ - [^ ]+$' || true)
+            if [ -n "$BAD" ]; then
+              echo "::error::Malformed changelog entry header(s) in $spec:"
+              echo "$BAD"
+              exit 1
+            fi
+            echo "  Latest entry:"
+            sed -n '/%changelog/,$ p' "$spec" | sed -n '2p'
+            echo "  ✓ all entry headers well-formed"
           done
+          EOF
+
+      - name: Remove container
+        if: always()
+        run: podman rm -f -t 0 speccheck 2>/dev/null || true
 
   # Check container availability (fast, parallel)
   check-container:
@@ -140,34 +177,57 @@ jobs:
     steps:
       - id: check
         run: |
-          if docker manifest inspect ${{ env.BUILDER_IMAGE }} > /dev/null 2>&1; then
+          # skopeo checks the remote manifest without a Docker daemon
+          # (the docker:// prefix is skopeo's registry transport, not
+          # the Docker engine). Preinstalled on ubuntu-latest runners;
+          # the guard covers future runner image changes.
+          if ! command -v skopeo >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y skopeo
+          fi
+          if skopeo inspect --raw "docker://${{ env.BUILDER_IMAGE }}" > /dev/null 2>&1; then
             echo "image=${{ env.BUILDER_IMAGE }}" >> "$GITHUB_OUTPUT"
           else
             echo "image=fedora:latest" >> "$GITHUB_OUTPUT"
           fi
 
   # Build SRPMs (uses the prebuilt builder image when available so the
-  # tool install is a no-op; lint jobs are intentionally not dependencies)
+  # tool install is a no-op). Gated on the quick validation jobs so a
+  # spelling/shellcheck/lint failure stops the expensive mock matrix
+  # from starting.
   build-srpms:
     name: Build SRPMs
     runs-on: ubuntu-latest
-    needs: [check-container]
-    container:
-      image: ${{ needs.check-container.outputs.image }}
+    needs: [spelling, shellcheck, lint, spec-validation, check-container]
+    env:
+      BUILD_IMAGE: ${{ needs.check-container.outputs.image }}
     steps:
       - uses: actions/checkout@v7
 
       # Exact key on the sources files, deliberately without
-      # restore-keys: build-srpm.sh hard-fails on checksum mismatch, so
-      # never offer it stale tarballs; a version bump is a clean miss.
+      # restore-keys: a version bump is a clean miss. build-srpm.sh
+      # re-downloads (and only then hard-fails) on checksum mismatch,
+      # so a corrupt cached tarball cannot wedge subsequent runs.
+      # v2: the cache moved from the job container's home to the
+      # runner's home when the job switched to podman.
       - name: Cache release tarballs
         uses: actions/cache@v6
         with:
           path: ~/rpmbuild/SOURCES
-          key: srpm-tarballs-${{ hashFiles('flux-*/sources') }}
+          key: srpm-tarballs-v2-${{ hashFiles('flux-*/sources') }}
 
       - name: Build all SRPMs
         run: |
+          mkdir -p ~/rpmbuild/SOURCES srpms
+          # ~/rpmbuild is mounted to /root/rpmbuild so the tarball cache
+          # (SOURCES) persists on the host across runs.
+          # build-srpm.sh downloads the release tarballs, verifies their
+          # SHA256 against flux-*/sources, and builds all four SRPMs,
+          # exiting non-zero on any failure.
+          podman run --rm -i \
+            -v "$PWD:/work" -w /work \
+            -v "$HOME/rpmbuild:/root/rpmbuild" \
+            "$BUILD_IMAGE" bash -s <<'EOF'
+          set -euo pipefail
           # Builder image ships these already; the fedora:latest
           # fallback container installs them here.
           if ! command -v rpmbuild >/dev/null 2>&1 || \
@@ -176,14 +236,11 @@ jobs:
             dnf install -y rpm-build rpmdevtools wget
           fi
 
-          # build-srpm.sh downloads the release tarballs, verifies their
-          # SHA256 against flux-*/sources, and builds all four SRPMs into
-          # ~/rpmbuild/SRPMS/, exiting non-zero on any failure.
           ./scripts/build-srpm.sh all
 
           # Move to workspace for upload
-          mkdir -p srpms
-          mv ~/rpmbuild/SRPMS/*.src.rpm srpms/
+          mv /root/rpmbuild/SRPMS/*.src.rpm /work/srpms/
+          EOF
       - uses: actions/upload-artifact@v7
         with:
           name: srpms
@@ -198,6 +255,9 @@ jobs:
     name: Build (${{ matrix.distro }})
     runs-on: ubuntu-latest
     needs: [build-srpms, check-container]
+    # Generous ceiling for a cold-cache mock run (security -> core ->
+    # sched/accounting); prevents a hung mock from burning 6h of runner.
+    timeout-minutes: 180
     # Don't let rawhide failures fail the entire workflow
     continue-on-error: ${{ matrix.allow-failure || false }}
     strategy:
@@ -220,9 +280,8 @@ jobs:
           - distro: centos-10
             mock-release: centos-stream+epel-10-x86_64
             short-name: el10
-    container:
-      image: ${{ needs.check-container.outputs.image }}
-      options: --privileged
+    env:
+      BUILD_IMAGE: ${{ needs.check-container.outputs.image }}
 
     steps:
       - uses: actions/checkout@v7
@@ -243,23 +302,34 @@ jobs:
       #   builddep download time
       # - ccache: fresh entry per run with prefix restore, cuts C/C++
       #   compile time on repeat builds
+      # The host path /var/cache/mock is bind-mounted into the build
+      # container, so the cached paths (and old cache entries) are
+      # unchanged from the docker-based container jobs.
       # ============================================================
-      - name: Install cache and speed tooling
-        run: |
-          # zstd: fast actions/cache compression
-          # nosync: mock preloads it to skip fsync during chroot package
-          # installs (safe in throwaway CI chroots)
-          command -v zstd >/dev/null 2>&1 || dnf install -y zstd
-          rpm -q nosync >/dev/null 2>&1 || dnf install -y nosync
-
       - name: Compute cache week key
         id: week
         run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
 
+      # /var/cache/mock holds the persisted caches; /var/lib/mock holds
+      # the live chroots. Both are bind-mounted into the build container
+      # from the host: keeping the chroots (the hottest I/O path: package
+      # installs, configure's thousands of small file ops, build trees)
+      # off the container's overlay graph measurably speeds up builds
+      # (~20% on a warm flux-security rebuild in local testing).
+      - name: Prepare mock host directories
+        run: |
+          sudo mkdir -p /var/cache/mock /var/lib/mock
+          sudo chown "$(id -u):$(id -g)" /var/cache/mock /var/lib/mock
+
       # The -bootstrap root cache matters: without it mock reinstalls
       # dnf tooling into a fresh bootstrap chroot on every run (~25s).
-      # v2: key bumped when the bootstrap path was added, so this week's
-      # already-saved v1 entry doesn't block saving the new layout.
+      # v3: podman-era entries only. The docker-era v2 archives restore
+      # but rootless mock rebuilds everything anyway (extracting them as
+      # the non-root runner changes file ownership semantics), and the
+      # weekly exact-key hit meant the usable caches each podman run
+      # built were never saved back - locking CI into a slow state.
+      # Deliberately no v2/v1 fallbacks: restoring one is pure download
+      # cost with no reuse.
       - name: Restore mock root and package caches
         uses: actions/cache@v6
         with:
@@ -267,10 +337,9 @@ jobs:
             /var/cache/mock/${{ matrix.mock-release }}/root_cache
             /var/cache/mock/${{ matrix.mock-release }}-bootstrap/root_cache
             /var/cache/mock/${{ matrix.mock-release }}/dnf_cache
-          key: mock-${{ matrix.mock-release }}-v2-${{ steps.week.outputs.week }}
+          key: mock-${{ matrix.mock-release }}-v3-${{ steps.week.outputs.week }}
           restore-keys: |
-            mock-${{ matrix.mock-release }}-v2-
-            mock-${{ matrix.mock-release }}-
+            mock-${{ matrix.mock-release }}-v3-
 
       - name: Restore compiler cache (ccache)
         uses: actions/cache@v6
@@ -280,8 +349,50 @@ jobs:
           restore-keys: |
             ccache-${{ matrix.mock-release }}-
 
+      # Rootless podman with --privileged: mock needs to create chroots
+      # and mounts, which user namespaces permit without a root daemon
+      # (verified: full chroot init + SRPM rebuild work rootless).
+      - name: Start build container
+        run: |
+          # Explicit pull with spaced retries: registries occasionally
+          # black out for minutes at a time, and podman's three built-in
+          # retries are only ~1s apart.
+          for attempt in 1 2 3 4; do
+            podman pull "$BUILD_IMAGE" && break
+            if [ "$attempt" = "4" ]; then
+              echo "::error::failed to pull $BUILD_IMAGE after 4 attempts"
+              exit 1
+            fi
+            echo "pull failed (attempt $attempt); retrying in $((attempt * 30))s"
+            sleep $((attempt * 30))
+          done
+          podman run -d --name mockbuilder --privileged \
+            -v "$PWD:/work" -w /work \
+            -v /var/cache/mock:/var/cache/mock \
+            -v /var/lib/mock:/var/lib/mock \
+            "$BUILD_IMAGE" sleep infinity
+
+          # Builder image ships these already; the fedora:latest
+          # fallback container installs them here. nosync: mock preloads
+          # it to skip fsync during chroot package installs (safe in
+          # throwaway CI chroots).
+          podman exec mockbuilder bash -c '
+            command -v mock >/dev/null 2>&1 && command -v rpmlint >/dev/null 2>&1 \
+              && rpm -q nosync >/dev/null 2>&1 \
+              || dnf install -y mock rpmlint nosync
+          '
+
+          # The restored ccache tree is extracted by the non-root runner,
+          # so inside the container it is owned by ns-root; open it up so
+          # the unprivileged chroot build users can read and write it
+          # (otherwise every compile is a ccache miss).
+          podman exec mockbuilder bash -c \
+            'd="/var/cache/mock/${{ matrix.mock-release }}/ccache"; ! [ -d "$d" ] || chmod -R a+rwX "$d"'
+
       - name: Configure mock caching
         run: |
+          podman exec -i mockbuilder bash -s <<'EOF'
+          set -euo pipefail
           # Enable mock's ccache plugin (persisted across runs above).
           # root_cache/dnf_cache are enabled by default; we only persist
           # them. Ensure the cached paths exist so the post-job cache
@@ -295,13 +406,13 @@ jobs:
           # CI builds never ship or install debuginfo RPMs (artifacts
           # exclude them, smoke tests don't use them). COPR production
           # builds still generate debuginfo after merge.
-          cat >> /etc/mock/site-defaults.cfg <<'EOF'
+          cat >> /etc/mock/site-defaults.cfg <<'MOCKCFG'
           config_opts['plugin_conf']['ccache_enable'] = True
           config_opts['plugin_conf']['ccache_opts']['max_cache_size'] = '1G'
           config_opts['nosync'] = True
           config_opts['macros']['%_enable_debug_packages'] = '0'
           config_opts['macros']['%debug_package'] = '%{nil}'
-          EOF
+          MOCKCFG
 
           # flux-sched on EL9 sources /opt/rh/gcc-toolset-13/enable, which
           # puts the toolset bin dir ahead of ccache's masquerade dir in
@@ -320,20 +431,25 @@ jobs:
           # cache so mock never considers the cache stale because this
           # file was just (re)written.
           touch -d '2020-01-01 00:00:00' /etc/mock/site-defaults.cfg
+          EOF
 
       - name: Initialize mock
-        run: mock -r ${{ matrix.mock-release }} --init
+        run: podman exec mockbuilder mock -r ${{ matrix.mock-release }} --init
 
       # ============================================================
       # Build flux-security
       # ============================================================
       - name: Build flux-security
         run: |
+          podman exec -i mockbuilder bash -s <<'EOF'
           set -o pipefail
           mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --rebuild srpms/flux-security-*.src.rpm --resultdir=results-security 2>&1 | tee security-build.log
+          EOF
 
       - name: Install flux-security in mock
         run: |
+          podman exec -i mockbuilder bash -s <<'EOF'
+          set -euo pipefail
           security_rpms=(results-security/flux-security-[0-9]*.x86_64.rpm)
           security_devel_rpms=(results-security/flux-security-devel-*.x86_64.rpm)
           SECURITY_RPM="${security_rpms[0]}"
@@ -341,17 +457,22 @@ jobs:
           echo "Installing: $SECURITY_RPM $SECURITY_DEVEL_RPM"
           # Use --no-clean and --no-cleanup-after to preserve chroot state
           mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM"
+          EOF
 
       # ============================================================
       # Build flux-core
       # ============================================================
       - name: Build flux-core
         run: |
+          podman exec -i mockbuilder bash -s <<'EOF'
           set -o pipefail
           mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --rebuild srpms/flux-core-*.src.rpm --resultdir=results-core 2>&1 | tee core-build.log
+          EOF
 
       - name: Install flux-core in mock
         run: |
+          podman exec -i mockbuilder bash -s <<'EOF'
+          set -euo pipefail
           core_rpms=(results-core/flux-core-[0-9]*.x86_64.rpm)
           core_devel_rpms=(results-core/flux-core-devel-*.x86_64.rpm)
           CORE_RPM="${core_rpms[0]}"
@@ -359,6 +480,7 @@ jobs:
           echo "Installing: $CORE_RPM $CORE_DEVEL_RPM"
           # Use --no-clean and --no-cleanup-after to preserve chroot state
           mock -r ${{ matrix.mock-release }} --no-clean --no-cleanup-after --install "$CORE_RPM" "$CORE_DEVEL_RPM"
+          EOF
 
       # ============================================================
       # Build flux-sched and flux-accounting in parallel (both depend only on core)
@@ -367,6 +489,8 @@ jobs:
       # Prepare a separate chroot for flux-accounting (needed to avoid mock lock contention)
       - name: Prepare parallel build chroot for flux-accounting
         run: |
+          podman exec -i mockbuilder bash -s <<'EOF'
+          set -euo pipefail
           mock -r ${{ matrix.mock-release }} --uniqueext=accounting --init
 
           security_rpms=(results-security/flux-security-[0-9]*.x86_64.rpm)
@@ -381,9 +505,11 @@ jobs:
           mock -r ${{ matrix.mock-release }} --uniqueext=accounting \
             --no-clean --no-cleanup-after \
             --install "$SECURITY_RPM" "$SECURITY_DEVEL_RPM" "$CORE_RPM" "$CORE_DEVEL_RPM"
+          EOF
 
       - name: Build flux-sched and flux-accounting (parallel)
         run: |
+          podman exec -i mockbuilder bash -s <<'EOF'
           set -o pipefail
 
           mock -r ${{ matrix.mock-release }} \
@@ -419,16 +545,15 @@ jobs:
           fi
 
           echo "=== Both builds succeeded ==="
+          EOF
 
       # ============================================================
       # Lint the built RPMs with each package's rpmlintrc filters
       # ============================================================
       - name: Run rpmlint on built RPMs
         run: |
-          # The prebuilt builder image ships rpmlint; the fedora:latest
-          # fallback does not, so install it when missing.
-          command -v rpmlint >/dev/null 2>&1 || dnf install -y rpmlint
-
+          podman exec -i mockbuilder bash -s <<'EOF'
+          set -euo pipefail
           FAILED=0
           for pkg in security core sched accounting; do
             dir="results-$pkg"
@@ -473,6 +598,7 @@ jobs:
             exit 1
           fi
           echo "=== All built RPMs linted: no rpmlint errors (warnings allowed) ==="
+          EOF
 
       # ============================================================
       # Generate summary and upload artifacts
@@ -480,6 +606,7 @@ jobs:
       - name: Generate build summary
         if: always()
         run: |
+          podman exec -i mockbuilder bash -s <<'EOF' || echo "build container unavailable; no summary"
           {
             echo "=== Build Summary for ${{ matrix.mock-release }} ==="
             echo "Build completed: $(date)"
@@ -507,6 +634,7 @@ jobs:
                    "/var/cache/mock/${{ matrix.mock-release }}/dnf_cache" \
                    2>/dev/null || echo "no caches"
           } | tee build-summary.txt
+          EOF
 
       # debuginfo/debugsource RPMs are excluded: they dominate artifact
       # size, and the smoke tests only install the binary RPMs. Rebuild
@@ -526,13 +654,21 @@ jobs:
             !results-*/*-debuginfo-*.rpm
             !results-*/*-debugsource-*.rpm
 
-      - name: Cleanup mock
+      # No 'mock --clean' first: the runner VM is discarded after the
+      # job, so scrubbing the chroots is pure wasted time (~5s).
+      - name: Cleanup build container
+        if: always()
+        run: podman rm -f -t 0 mockbuilder 2>/dev/null || true
+
+      # Chroot builds write ccache/dnf files as subuid-mapped users;
+      # map everything back to the runner user so the post-job cache
+      # save (which runs on the host) can read the tree. Failures are
+      # surfaced (but non-fatal) since they degrade the next run's cache.
+      - name: Normalize cache ownership for save
         if: always()
         run: |
-          # Clean up main mock chroot
-          mock -r ${{ matrix.mock-release }} --clean
-          # Clean up parallel build chroot (if it exists)
-          mock -r ${{ matrix.mock-release }} --uniqueext=accounting --clean 2>/dev/null || true
+          podman unshare chown -R 0:0 /var/cache/mock || \
+            echo "::warning::cache ownership normalization failed; next run's cache may be incomplete"
 
   # ============================================================
   # Smoke Tests - Basic verification that installed RPMs work
@@ -564,8 +700,6 @@ jobs:
           - distro: centos-10
             image: quay.io/centos/centos:stream10
             short-name: el10
-    container:
-      image: ${{ matrix.image }}
 
     steps:
       - name: Download RPMs
@@ -576,10 +710,18 @@ jobs:
 
       # Persist dnf's package/metadata cache: the smoke jobs sit on the
       # workflow's critical path and most of their time is dnf downloads.
-      # (dnf4 uses /var/cache/dnf, dnf5 uses /var/cache/libdnf5.)
+      # (dnf4 uses /var/cache/dnf, dnf5 uses /var/cache/libdnf5.) The
+      # host paths are bind-mounted into the distro container, so the
+      # cached paths (and old cache entries) are unchanged from the
+      # docker-based container jobs.
       - name: Compute cache week key
         id: week
         run: echo "week=$(date +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare dnf cache directories
+        run: |
+          sudo mkdir -p /var/cache/dnf /var/cache/libdnf5
+          sudo chown "$(id -u):$(id -g)" /var/cache/dnf /var/cache/libdnf5
 
       - name: Restore dnf package cache
         uses: actions/cache@v6
@@ -592,22 +734,52 @@ jobs:
             smoke-dnf-${{ matrix.distro }}-${{ steps.week.outputs.week }}-
             smoke-dnf-${{ matrix.distro }}-
 
+      - name: Start distro container
+        run: |
+          # Explicit pull with spaced retries: registries occasionally
+          # black out for minutes at a time, and podman's three built-in
+          # retries are only ~1s apart.
+          for attempt in 1 2 3 4; do
+            podman pull ${{ matrix.image }} && break
+            if [ "$attempt" = "4" ]; then
+              echo "::error::failed to pull ${{ matrix.image }} after 4 attempts"
+              exit 1
+            fi
+            echo "pull failed (attempt $attempt); retrying in $((attempt * 30))s"
+            sleep $((attempt * 30))
+          done
+          podman run -d --name smoke \
+            -v "$PWD:/work" -w /work \
+            -v /var/cache/dnf:/var/cache/dnf \
+            -v /var/cache/libdnf5:/var/cache/libdnf5 \
+            ${{ matrix.image }} sleep infinity
+
       - name: Keep dnf packages for the cache
         run: |
-          mkdir -p /var/cache/dnf /var/cache/libdnf5
-          echo "keepcache=1" >> /etc/dnf/dnf.conf
+          podman exec smoke bash -c 'echo "keepcache=1" >> /etc/dnf/dnf.conf'
 
       - name: Enable EPEL (CentOS only)
         if: startsWith(matrix.distro, 'centos')
         run: |
-          dnf install -y epel-release
-          dnf config-manager --set-enabled crb 2>/dev/null || true
+          podman exec smoke bash -c '
+            dnf install -y epel-release
+            dnf config-manager --set-enabled crb 2>/dev/null || true
+          '
 
       - name: Install Flux RPMs
         run: |
-          # Install all non-debug RPMs
-          # Use --skip-broken for Rawhide where library versions may drift
-          dnf install -y --skip-broken \
+          podman exec -i smoke bash -s <<'EOF'
+          set -euo pipefail
+          # Install all non-debug RPMs.
+          # --skip-broken is Rawhide-only, where library versions may
+          # drift; the later test steps skip packages that could not be
+          # installed. On stable distros a broken dependency must fail
+          # the job instead of being silently dropped.
+          INSTALL_OPTS=()
+          if [ "${{ matrix.short-name }}" = "rawhide" ]; then
+            INSTALL_OPTS+=(--skip-broken)
+          fi
+          dnf install -y "${INSTALL_OPTS[@]}" \
             rpms/results-security/flux-security-[0-9]*.x86_64.rpm \
             rpms/results-core/flux-core-[0-9]*.x86_64.rpm \
             rpms/results-sched/flux-sched-[0-9]*.x86_64.rpm \
@@ -616,8 +788,19 @@ jobs:
           echo "=== Installed Flux packages ==="
           rpm -qa | grep -E '^flux' | sort
 
+          # Belt and braces: assert every package actually installed on
+          # non-Rawhide distros so a partial install can never pass.
+          if [ "${{ matrix.short-name }}" != "rawhide" ]; then
+            for pkg in flux-security flux-core flux-sched flux-accounting; do
+              rpm -q "$pkg" >/dev/null || { echo "::error::$pkg was not installed"; exit 1; }
+            done
+          fi
+          EOF
+
       - name: Setup test environment
         run: |
+          podman exec -i smoke bash -s <<'EOF'
+          set -euo pipefail
           # Install util-linux (provides runuser), munge for security
           dnf install -y util-linux munge munge-libs
 
@@ -640,11 +823,12 @@ jobs:
             echo "=== Test user fluxuser already exists ==="
           fi
           id fluxuser
+          EOF
 
       - name: Setup flux environment
         run: |
           # Single quotes are intentional: expansion happens in runuser's bash.
-          # shellcheck disable=SC2016
+          podman exec -i smoke bash -s <<'EOF'
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Flux environment ==="
@@ -658,11 +842,12 @@ jobs:
               fi
             done
           '
+          EOF
 
       - name: Verify flux-core CLI (standalone)
         run: |
           # Single quotes are intentional: expansion happens in runuser's bash.
-          # shellcheck disable=SC2016
+          podman exec -i smoke bash -s <<'EOF'
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== flux --version ==="
@@ -671,11 +856,12 @@ jobs:
             echo "=== flux --help ==="
             flux --help
           '
+          EOF
 
       - name: Verify Python bindings
         run: |
           # Single quotes are intentional: expansion happens in runuser's bash.
-          # shellcheck disable=SC2016
+          podman exec -i smoke bash -s <<'EOF'
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Testing flux Python module import ==="
@@ -683,11 +869,12 @@ jobs:
             python3 -c "from flux import Flux; print(\"Flux class imported successfully\")"
             python3 -c "from flux.job import JobspecV1; print(\"JobspecV1 imported successfully\")"
           '
+          EOF
 
       - name: Verify flux instance basic functionality
         run: |
           # Single quotes are intentional: expansion happens in runuser's bash.
-          # shellcheck disable=SC2016
+          podman exec -i smoke bash -s <<'EOF'
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Basic instance startup (test mode) ==="
@@ -701,11 +888,12 @@ jobs:
               flux module list
             "
           '
+          EOF
 
       - name: Test job submission and execution
         run: |
           # Single quotes are intentional: expansion happens in runuser's bash.
-          # shellcheck disable=SC2016
+          podman exec -i smoke bash -s <<'EOF'
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Submit and run a simple job ==="
@@ -719,11 +907,12 @@ jobs:
               echo \"Bulk jobs completed\"
             "
           '
+          EOF
 
       - name: Test resource and queue commands
         run: |
           # Single quotes are intentional: expansion happens in runuser's bash.
-          # shellcheck disable=SC2016
+          podman exec -i smoke bash -s <<'EOF'
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Resource and queue status ==="
@@ -734,11 +923,12 @@ jobs:
               flux uptime
             "
           '
+          EOF
 
       - name: Test KVS operations
         run: |
           # Single quotes are intentional: expansion happens in runuser's bash.
-          # shellcheck disable=SC2016
+          podman exec -i smoke bash -s <<'EOF'
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== KVS read/write ==="
@@ -749,11 +939,12 @@ jobs:
               flux kvs unlink test.key
             "
           '
+          EOF
 
       - name: Test event system
         run: |
           # Single quotes are intentional: expansion happens in runuser's bash.
-          # shellcheck disable=SC2016
+          podman exec -i smoke bash -s <<'EOF'
           runuser -u fluxuser -- bash -c '
             eval $(flux env)
             echo "=== Event pub/sub ==="
@@ -765,11 +956,12 @@ jobs:
               echo \"Event system working\"
             "
           '
+          EOF
 
       - name: Verify flux-sched scheduling
         run: |
           # Single quotes are intentional: expansion happens in runuser's bash.
-          # shellcheck disable=SC2016
+          podman exec -i smoke bash -s <<'EOF'
           if rpm -q flux-sched &>/dev/null; then
             runuser -u fluxuser -- bash -c '
               eval $(flux env)
@@ -789,11 +981,12 @@ jobs:
           else
             echo "flux-sched not installed, skipping"
           fi
+          EOF
 
       - name: Verify flux-accounting plugin
         run: |
           # Single quotes are intentional: expansion happens in runuser's bash.
-          # shellcheck disable=SC2016
+          podman exec -i smoke bash -s <<'EOF'
           if rpm -q flux-accounting &>/dev/null; then
             runuser -u fluxuser -- bash -c '
               eval $(flux env)
@@ -812,10 +1005,12 @@ jobs:
           else
             echo "flux-accounting not installed, skipping"
           fi
+          EOF
 
       - name: Generate smoke test summary
         if: always()
         run: |
+          podman exec -i smoke bash -s <<'EOF' || echo "smoke container unavailable; no summary"
           {
             echo "=== Smoke Test Summary ==="
             echo "Distro: ${{ matrix.distro }}"
@@ -831,6 +1026,7 @@ jobs:
               echo "Smoke tests did NOT pass (job status: ${{ job.status }})"
             fi
           } | tee smoke-test-summary.txt
+          EOF
 
       - name: Upload smoke test results
         uses: actions/upload-artifact@v7
@@ -838,3 +1034,7 @@ jobs:
         with:
           name: smoke-test-${{ matrix.short-name }}
           path: smoke-test-summary.txt
+
+      - name: Remove container
+        if: always()
+        run: podman rm -f -t 0 smoke 2>/dev/null || true
