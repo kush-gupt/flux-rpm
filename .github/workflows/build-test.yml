@@ -12,6 +12,7 @@ on:
       - 'scripts/**'
       - '.copr/**'
       - '.github/workflows/build-test.yml'
+      - '.github/workflows/check-updates.yml'
       - '.github/containers/**'
   workflow_dispatch:
 
@@ -994,6 +995,7 @@ jobs:
 
               echo "Checking installed files..."
               ls -la /usr/lib64/flux/job-manager/plugins/mf_priority.so
+              ls -la /usr/lib64/flux/job-manager/plugins/resource_quotas.so
               ls -la /usr/libexec/flux/cmd/flux-account*.py | head -5
 
               echo "Testing flux account command..."

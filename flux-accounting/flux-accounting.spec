@@ -1,5 +1,5 @@
 Name:    flux-accounting
-Version: 0.60.0
+Version: 0.61.0
 Release: 1%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
@@ -95,8 +95,9 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 # Python fluxacct package (uses sitearch due to native extensions)
 %{python3_sitearch}/fluxacct
 
-# priority plugin
+# job-manager plugins
 %{_libdir}/flux/job-manager/plugins/mf_priority.so
+%{_libdir}/flux/job-manager/plugins/resource_quotas.so
 
 # fluxacct namespace package in flux python dir
 %{_libdir}/flux/python%{python3_version}/fluxacct
@@ -121,8 +122,21 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 
 # manpages
 %{_mandir}/man1/*.1*
+%{_mandir}/man5/*.5*
 
 %changelog
+* Wed Sep 02 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.61.0-1
+- Update to v0.61.0
+- database: add new max-[nodes|cores] per-queue option
+- feat: toml config for accounting
+- plugin: Resource quota for flux accounting
+- edit-all-users: add --[add|delete]-queue optional arguments
+- Fix: edit-queue: default to None instead of INTEGER_MAX
+- Fix: plugin: reuse load_* () functions in RPC handlers
+- Fix: update-db: improve efficiency of updates with large databases
+- Package resource_quotas.so (new upstream plugin)
+- Package man5 pages
+
 * Thu Aug 06 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.60.0-1
 - Update to v0.60.0
 - plugin: add option to toggle rejecting unknown queues during job validation
