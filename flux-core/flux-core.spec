@@ -1,6 +1,6 @@
 Name:    flux-core
-Version: 0.88.0
-Release: 2%{?dist}
+Version: 0.89.0
+Release: 1%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
@@ -48,6 +48,9 @@ Requires: lua-posix
 Requires: python3-cffi >= %{cffi_minver}
 Requires: python3-pyyaml >= %{pyyaml_minver}
 Requires: python3-ply >= %{ply_minver}
+
+# cron.daily dump/gc scripts (rpmlint missing-dependency-to-crontabs)
+Requires: crontabs
 
 # The python3-flux subpackage was merged into the main package in
 # 0.81.0-3; replace any orphaned copy left over from older builds
@@ -212,9 +215,8 @@ fi
 %{_tmpfilesdir}/flux.conf
 
 # cronfiles
-%dir %{_sysconfdir}/flux/system
-%dir %{_sysconfdir}/flux/system/cron.d
-%{_sysconfdir}/flux/system/cron.d/kvs-backup.cron
+%{_sysconfdir}/cron.daily/50-flux-dump
+%{_sysconfdir}/cron.daily/51-flux-gc
 
 # bash completions
 %{_datadir}/bash-completion/completions/flux
@@ -269,6 +271,21 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Thu Sep 03 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.89.0-1
+- Update to v0.89.0
+- kvs: enable nightly garbage collection on system instance
+- support sdexec.allowed-devices to extend allowed devices for all jobs when sdexec-constrain-resources is set
+- job-manager: add effective queue policy to the queue-list RPC
+- return effective queue config in job-manager.queue-list and use it in flux resource and frobnicator
+- sdexec: add background task support
+- Fix: libpmi: conform to recent RFC 13 version handshake changes
+- Fix: fix mismatched pack/unpack format specifiers and arguments
+- Fix: fix segfault in flux job eventlog --follow
+- Package 50-flux-dump (cron.daily)
+- Package 51-flux-gc (cron.daily)
+- Drop kvs-backup.cron (no longer installed)
+- Require crontabs for cron.daily dump/gc scripts
+
 * Mon Aug 10 2026 Cursor Agent <cursoragent@cursor.com> - 0.88.0-2
 - Add Obsoletes/Provides for the python3-flux subpackage merged into the
   main package in 0.81.0-3, so upgrades replace the orphaned package

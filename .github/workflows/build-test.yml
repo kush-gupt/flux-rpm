@@ -798,6 +798,26 @@ jobs:
           fi
           EOF
 
+      - name: Verify flux-core cron.daily scripts
+        run: |
+          podman exec -i smoke bash -s <<'EOF'
+          if ! rpm -q flux-core &>/dev/null; then
+            echo "flux-core not installed, skipping"
+            exit 0
+          fi
+          set -euo pipefail
+          echo "=== flux-core cron.daily scripts (0.89.0 dump/gc) ==="
+          test -x /etc/cron.daily/50-flux-dump
+          test -x /etc/cron.daily/51-flux-gc
+          rpm -ql flux-core | grep -F /etc/cron.daily/50-flux-dump
+          rpm -ql flux-core | grep -F /etc/cron.daily/51-flux-gc
+          if rpm -ql flux-core | grep -F kvs-backup.cron; then
+            echo "::error::stale kvs-backup.cron still packaged"
+            exit 1
+          fi
+          echo "cron.daily dump/gc scripts packaged; kvs-backup.cron gone"
+          EOF
+
       - name: Setup test environment
         run: |
           podman exec -i smoke bash -s <<'EOF'

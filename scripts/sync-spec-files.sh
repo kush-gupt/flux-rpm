@@ -11,8 +11,8 @@
 # Usage: sync-spec-files.sh SPEC SRC_TREE [NOTES_FILE]
 #
 # NOTES_FILE (default: /tmp/added_files.txt) receives changelog bullets
-# for whatever was added. The script is idempotent: a second run on the
-# same spec/tree is a no-op.
+# for files added to or dropped from %files. The script is idempotent:
+# a second run on the same spec/tree is a no-op.
 set -euo pipefail
 
 usage() {
@@ -55,9 +55,14 @@ resolve_am_dir() {
     raw=${raw//\$\(fluxrc1dir\)/%{_sysconfdir\}\/flux\/rc1.d}
     raw=${raw//\$\(fluxrc3dir\)/%{_sysconfdir\}\/flux\/rc3.d}
     raw=${raw//\$\(fluxmoddir\)/%{_libdir\}\/flux\/modules}
+    raw=${raw//\$\(fluxconfdir\)/%{_sysconfdir\}\/flux}
+    raw=${raw//\$\(fluxdatadir\)/%{_datadir\}\/flux}
+    raw=${raw//\$\(fluxlibexecdir\)/%{_libexecdir\}\/flux}
     raw=${raw//\$\(libexecdir\)/%{_libexecdir\}}
     raw=${raw//\$\(libdir\)/%{_libdir\}}
     raw=${raw//\$\(sysconfdir\)/%{_sysconfdir\}}
+    # %{_tmpfilesdir} is /usr/lib/tmpfiles.d, not %{_libdir} (/usr/lib64).
+    raw=${raw//\$\(prefix\)\/lib\/tmpfiles.d/%{_tmpfilesdir\}}
     raw=${raw//\$\(prefix\)\/libexec/%{_libexecdir\}}
     raw=${raw//\$\(prefix\)\/lib/%{_libdir\}}
     raw=${raw//\$\(prefix\)\/etc/%{_sysconfdir\}}
@@ -71,10 +76,10 @@ resolve_am_dir() {
 }
 
 # Collect "path<TAB>kind" candidates from an extracted source tree.
-# kind is plugin|command|rc|unit|manN — used for insertion + changelog.
+# kind is plugin|command|rc|unit|cron|manN — used for insertion + changelog.
 discover_candidates() {
     local src=$1
-    local am vars prefix dir_val item base dest section
+    local am vars prefix dir_val item base dest section stripped
 
     while IFS= read -r -d '' am; do
         vars=$(flatten_continuations < "$am")
@@ -136,6 +141,33 @@ discover_candidates() {
                 base="${base%.in}"
                 [[ -n "$base" && "$base" != *'$'* ]] || continue
                 printf '%s\t%s\n' "%{_unitdir}/${base}" unit
+            done
+        done <<< "$vars"
+
+        # cron.daily / other prefix_SCRIPTS+prefixdir pairs we can resolve.
+        # 0.89.0 replaced flux/system/cron.d/kvs-backup.cron with
+        # /etc/cron.daily/{50-flux-dump,51-flux-gc}.
+        while IFS= read -r line; do
+            stripped=$line
+            stripped=${stripped#nobase_dist_}
+            stripped=${stripped#nobase_}
+            stripped=${stripped#dist_}
+            [[ "$stripped" =~ ^([A-Za-z_][A-Za-z0-9]*)_(SCRIPTS|DATA)[[:space:]]*=[[:space:]]*(.*)$ ]] || continue
+            prefix="${BASH_REMATCH[1]}"
+            case "$prefix" in
+                noinst|check|EXTRA|pkgconfig|bashcomp|fluxhelp|fluxnodocs|man) continue ;;
+                fluxcmd|fluxrc1|fluxrc3|systemdsystemunit) continue ;;
+            esac
+            dir_val=$(echo "$vars" | sed -n "s/^${prefix}dir[[:space:]]*=[[:space:]]*//p" | tail -n1)
+            [[ -n "$dir_val" ]] || continue
+            dest=$(resolve_am_dir "$dir_val") || continue
+            [[ -n "$dest" ]] || continue
+            for item in ${BASH_REMATCH[3]}; do
+                base="${item##*/}"
+                [[ -n "$base" && "$base" != *'$'* && "$base" != *'('* ]] || continue
+                if [[ "$dest" == *cron* ]]; then
+                    printf '%s\t%s\n' "${dest}/${base}" cron
+                fi
             done
         done <<< "$vars"
 
@@ -276,6 +308,8 @@ insert_files_entry() {
                 needle = "sysconfdir\\}/flux/rc"
             } else if (kind == "unit") {
                 needle = "\\{_unitdir\\}/"
+            } else if (kind == "cron") {
+                needle = "cron"
             } else {
                 needle = ""
             }
@@ -323,6 +357,114 @@ insert_files_entry() {
     mv "$tmp" "$spec"
 }
 
+# Remove every %files line whose normalized path equals $path, plus a
+# following blank line if that would leave a double blank. Preceding
+# comment-only blocks that sit immediately above the dropped line are
+# kept — callers that drop a whole group (file + its %dir parents)
+# handle comments by leaving a still-accurate section header.
+drop_files_entry() {
+    local spec=$1
+    local path=$2
+    local tmp
+    tmp=$(mktemp)
+    awk -v path="$path" '
+        function norm(line,   s) {
+            s = line
+            sub(/#.*/, "", s)
+            sub(/^[[:space:]]+/, "", s)
+            sub(/[[:space:]]+$/, "", s)
+            sub(/^%dir[[:space:]]+/, "", s)
+            sub(/^%ghost[[:space:]]+/, "", s)
+            sub(/^%config(\([^)]*\))?[[:space:]]+/, "", s)
+            sub(/^%attr\([^)]*\)[[:space:]]+/, "", s)
+            return s
+        }
+        {
+            if (norm($0) == path) next
+            print
+        }
+    ' "$spec" > "$tmp"
+    mv "$tmp" "$spec"
+}
+
+# True if $base or $base.in exists anywhere in the source tree.
+source_has_basename() {
+    local src=$1 base=$2
+    find "$src" \( -name "$base" -o -name "${base}.in" \) -print -quit | grep -q .
+}
+
+# Drop exact %{_sysconfdir} paths that the new tarball no longer ships
+# (0.89.0: kvs-backup.cron replaced by cron.daily scripts). Globs and
+# %dir ownership lines are left alone here; empty %dir parents of a
+# dropped file are pruned next.
+drop_stale_sysconf() {
+    local spec=$1 src=$2
+    local raw entry base p
+    local -a stale=()
+    mapfile -t spec_lines < <(collect_spec_paths "$spec")
+    for raw in "${spec_lines[@]}"; do
+        [[ -z "$raw" || "$raw" =~ ^[[:space:]]*# ]] && continue
+        case "$raw" in
+            %license*|%doc*|%defattr*|%dir*) continue ;;
+        esac
+        [[ "$raw" == *"*"* ]] && continue
+        entry=$(normalize_files_entry "$raw")
+        [[ "$entry" == "%{_sysconfdir}"/* ]] || continue
+        base="${entry##*/}"
+        [[ -n "$base" ]] || continue
+        if source_has_basename "$src" "$base"; then
+            continue
+        fi
+        echo "Dropping stale %files entry: $entry"
+        stale+=("$entry")
+        echo "- Drop ${base} (no longer installed)" >> "$NOTES"
+    done
+    ((${#stale[@]})) || return 0
+    for p in "${stale[@]}"; do
+        drop_files_entry "$spec" "$p"
+    done
+    # Prune %dir parents that only existed to hold dropped files.
+    for p in "${stale[@]}"; do
+        prune_empty_dir_parents "$spec" "$p"
+    done
+}
+
+# Walk up from a dropped file's directory and remove %dir lines that
+# no longer have any remaining %files children.
+prune_empty_dir_parents() {
+    local spec=$1
+    local dropped=$2
+    local parent found raw entry
+    parent="${dropped%/*}"
+    while [[ "$parent" == "%{_sysconfdir}"* ]]; do
+        found=0
+        mapfile -t spec_lines < <(collect_spec_paths "$spec")
+        for raw in "${spec_lines[@]}"; do
+            [[ -z "$raw" || "$raw" =~ ^[[:space:]]*# ]] && continue
+            case "$raw" in
+                %license*|%doc*|%defattr*) continue ;;
+            esac
+            entry=$(normalize_files_entry "$raw")
+            [[ -n "$entry" ]] || continue
+            if [[ "$entry" == "$parent" && "$raw" != %dir* ]]; then
+                found=1
+                break
+            fi
+            if [[ "$entry" == "$parent"/* ]]; then
+                found=1
+                break
+            fi
+        done
+        if [[ "$found" -eq 0 ]]; then
+            echo "Dropping empty %dir: $parent"
+            drop_files_entry "$spec" "$parent"
+        else
+            break
+        fi
+        parent="${parent%/*}"
+    done
+}
+
 changelog_note() {
     local path=$1
     local kind=$2
@@ -332,9 +474,72 @@ changelog_note() {
         command) echo "- Package ${name} (new upstream command)" ;;
         rc)      echo "- Package ${name} rc hook" ;;
         unit)    echo "- Package ${name} systemd unit" ;;
+        cron)    echo "- Package ${name} (cron.daily)" ;;
         man*)    echo "- Package ${kind} pages" ;;
         *)       echo "- Package ${name}" ;;
     esac
+}
+
+# Fedora/RHEL rpmlint errors on cron.daily scripts without an explicit
+# Requires: crontabs (missing-dependency-to-crontabs). Add it when the
+# spec ships anything under a cron path and the preamble lacks it.
+ensure_crontabs_requires() {
+    local spec=$1 tmp
+    if awk '
+        /^%(description|package|prep|build|install|files)/ { exit }
+        /^Requires:[[:space:]]+crontabs([[:space:]]|$)/ { found=1 }
+        END { exit !found }
+    ' "$spec"; then
+        return 0
+    fi
+    if ! awk '
+        /^%files([[:space:]]|$)/ { in_files=1; next }
+        /^%changelog/ { in_files=0 }
+        /^%(prep|build|install|check|package|description)/ {
+            if ($0 !~ /^%files/) in_files=0
+        }
+        in_files && /cron/ { found=1 }
+        END { exit !found }
+    ' "$spec"; then
+        return 0
+    fi
+
+    tmp=$(mktemp)
+    awk '
+        {
+            lines[NR]=$0
+            if (!past && /^Requires:/) last_req=NR
+            if (/^%(description|package|prep|build|install|files)/) past=1
+        }
+        END {
+            inserted=0
+            if (last_req) {
+                for (i=1; i<=NR; i++) {
+                    print lines[i]
+                    if (i==last_req && !inserted) {
+                        print "Requires: crontabs"
+                        inserted=1
+                    }
+                }
+            } else {
+                for (i=1; i<=NR; i++) {
+                    if (!inserted && lines[i] ~ /^%(description|package|prep|build|install|files)/) {
+                        print "Requires: crontabs"
+                        print ""
+                        inserted=1
+                    }
+                    print lines[i]
+                }
+            }
+            if (!inserted) {
+                print "ERROR: could not insert Requires: crontabs" > "/dev/stderr"
+                exit 1
+            }
+        }
+    ' "$spec" > "$tmp"
+    mv "$tmp" "$spec"
+    echo "Adding Requires: crontabs"
+    echo "- Require crontabs for cron.daily scripts" >> "$NOTES"
 }
 
 # ---------------------------------------------------------------------------
@@ -412,6 +617,61 @@ EOF
     "$0" "$spec" "$src" "$notes"
     [[ ! -s "$notes" ]] || { echo "FAIL: directory ownership not honored" >&2; return 1; }
 
+    # 0.89.0-shaped gap: cron.daily scripts replace kvs-backup.cron,
+    # and the now-empty cron.d / flux/system %dir lines go with it.
+    mkdir -p "$src/etc/cron.daily"
+    echo '#!/bin/sh' > "$src/etc/cron.daily/50-flux-dump"
+    echo '#!/bin/sh' > "$src/etc/cron.daily/51-flux-gc"
+    echo 'initrc' > "$src/etc/initrc.lua"
+    cat > "$src/etc/Makefile.am" <<'EOF'
+etc_DATA = initrc.lua
+crondailydir = $(sysconfdir)/cron.daily
+dist_crondaily_SCRIPTS = cron.daily/50-flux-dump cron.daily/51-flux-gc
+EOF
+    cat > "$spec" <<'EOF'
+Name: test
+%files
+%{_libdir}/flux/job-manager
+%{_libexecdir}/flux
+%{_mandir}/man1/*.1*
+%{_mandir}/man5/*.5*
+%dir %{_sysconfdir}/flux
+%dir %{_sysconfdir}/flux/system
+%dir %{_sysconfdir}/flux/system/cron.d
+%{_sysconfdir}/flux/system/cron.d/kvs-backup.cron
+%{_sysconfdir}/flux/initrc.lua
+%changelog
+* Wed Sep 02 2026 test - 1-1
+- initial
+EOF
+    "$0" "$spec" "$src" "$notes"
+    grep -q '%{_sysconfdir}/cron.daily/50-flux-dump' "$spec" \
+        || { echo "FAIL: 50-flux-dump not packaged" >&2; return 1; }
+    grep -q '%{_sysconfdir}/cron.daily/51-flux-gc' "$spec" \
+        || { echo "FAIL: 51-flux-gc not packaged" >&2; return 1; }
+    grep -q 'kvs-backup.cron' "$spec" \
+        && { echo "FAIL: stale kvs-backup.cron still listed" >&2; return 1; }
+    grep -q 'flux/system/cron.d' "$spec" \
+        && { echo "FAIL: empty cron.d dir still listed" >&2; return 1; }
+    grep -E -q '%dir %\{_sysconfdir\}/flux/system$' "$spec" \
+        && { echo "FAIL: empty flux/system dir still listed" >&2; return 1; }
+    grep -E -q '%dir %\{_sysconfdir\}/flux$' "$spec" \
+        || { echo "FAIL: flux sysconf dir should remain" >&2; return 1; }
+    grep -q '%{_sysconfdir}/flux/initrc.lua' "$spec" \
+        || { echo "FAIL: initrc.lua should remain" >&2; return 1; }
+    grep -q -- '- Package 50-flux-dump (cron.daily)' "$notes" \
+        || { echo "FAIL: cron.daily note missing" >&2; return 1; }
+    grep -q -- '- Drop kvs-backup.cron (no longer installed)' "$notes" \
+        || { echo "FAIL: drop note missing" >&2; return 1; }
+    grep -qE '^Requires:[[:space:]]+crontabs$' "$spec" \
+        || { echo "FAIL: Requires: crontabs not added" >&2; return 1; }
+    grep -q -- '- Require crontabs for cron.daily scripts' "$notes" \
+        || { echo "FAIL: crontabs require note missing" >&2; return 1; }
+
+    # Idempotent after the swap.
+    "$0" "$spec" "$src" "$notes"
+    [[ ! -s "$notes" ]] || { echo "FAIL: cron swap second run was not a no-op" >&2; return 1; }
+
     echo "self-test passed"
 }
 
@@ -456,10 +716,15 @@ while IFS=$'\t' read -r path kind; do
     mapfile -t spec_lines < <(collect_spec_paths "$SPEC")
 done < <(discover_candidates "$SRC" | sort -u)
 
-if [[ "$added" -eq 0 ]]; then
-    echo "No new %files entries needed"
+drop_stale_sysconf "$SPEC" "$SRC"
+dropped=$(grep -c '^- Drop ' "$NOTES" || true)
+ensure_crontabs_requires "$SPEC"
+required=$(grep -c '^- Require crontabs' "$NOTES" || true)
+
+if [[ "$added" -eq 0 && "$dropped" -eq 0 && "$required" -eq 0 ]]; then
+    echo "No %files changes needed"
 else
-    echo "Added ${added} %files entr$( [[ "$added" -eq 1 ]] && echo y || echo ies )"
+    echo "Added ${added} %files entr$( [[ "$added" -eq 1 ]] && echo y || echo ies ), dropped ${dropped} stale"
     echo "Changelog notes:"
     cat "$NOTES"
 fi
