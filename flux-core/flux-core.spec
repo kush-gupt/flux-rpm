@@ -49,6 +49,9 @@ Requires: python3-cffi >= %{cffi_minver}
 Requires: python3-pyyaml >= %{pyyaml_minver}
 Requires: python3-ply >= %{ply_minver}
 
+# cron.daily dump/gc scripts (rpmlint missing-dependency-to-crontabs)
+Requires: crontabs
+
 # The python3-flux subpackage was merged into the main package in
 # 0.81.0-3; replace any orphaned copy left over from older builds
 Obsoletes: python3-flux < 0.81.0-3
@@ -281,6 +284,7 @@ fi
 - Package 50-flux-dump (cron.daily)
 - Package 51-flux-gc (cron.daily)
 - Drop kvs-backup.cron (no longer installed)
+- Require crontabs for cron.daily dump/gc scripts
 
 * Mon Aug 10 2026 Cursor Agent <cursoragent@cursor.com> - 0.88.0-2
 - Add Obsoletes/Provides for the python3-flux subpackage merged into the

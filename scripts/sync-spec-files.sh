@@ -480,6 +480,68 @@ changelog_note() {
     esac
 }
 
+# Fedora/RHEL rpmlint errors on cron.daily scripts without an explicit
+# Requires: crontabs (missing-dependency-to-crontabs). Add it when the
+# spec ships anything under a cron path and the preamble lacks it.
+ensure_crontabs_requires() {
+    local spec=$1 tmp
+    if awk '
+        /^%(description|package|prep|build|install|files)/ { exit }
+        /^Requires:[[:space:]]+crontabs([[:space:]]|$)/ { found=1 }
+        END { exit !found }
+    ' "$spec"; then
+        return 0
+    fi
+    if ! awk '
+        /^%files([[:space:]]|$)/ { in_files=1; next }
+        /^%changelog/ { in_files=0 }
+        /^%(prep|build|install|check|package|description)/ {
+            if ($0 !~ /^%files/) in_files=0
+        }
+        in_files && /cron/ { found=1 }
+        END { exit !found }
+    ' "$spec"; then
+        return 0
+    fi
+
+    tmp=$(mktemp)
+    awk '
+        {
+            lines[NR]=$0
+            if (!past && /^Requires:/) last_req=NR
+            if (/^%(description|package|prep|build|install|files)/) past=1
+        }
+        END {
+            inserted=0
+            if (last_req) {
+                for (i=1; i<=NR; i++) {
+                    print lines[i]
+                    if (i==last_req && !inserted) {
+                        print "Requires: crontabs"
+                        inserted=1
+                    }
+                }
+            } else {
+                for (i=1; i<=NR; i++) {
+                    if (!inserted && lines[i] ~ /^%(description|package|prep|build|install|files)/) {
+                        print "Requires: crontabs"
+                        print ""
+                        inserted=1
+                    }
+                    print lines[i]
+                }
+            }
+            if (!inserted) {
+                print "ERROR: could not insert Requires: crontabs" > "/dev/stderr"
+                exit 1
+            }
+        }
+    ' "$spec" > "$tmp"
+    mv "$tmp" "$spec"
+    echo "Adding Requires: crontabs"
+    echo "- Require crontabs for cron.daily scripts" >> "$NOTES"
+}
+
 # ---------------------------------------------------------------------------
 # self-test: the 0.61.0-shaped gap (new plugin + new man section) and
 # the 0.60.0-shaped gap (new command), plus directory/glob coverage.
@@ -601,6 +663,10 @@ EOF
         || { echo "FAIL: cron.daily note missing" >&2; return 1; }
     grep -q -- '- Drop kvs-backup.cron (no longer installed)' "$notes" \
         || { echo "FAIL: drop note missing" >&2; return 1; }
+    grep -qE '^Requires:[[:space:]]+crontabs$' "$spec" \
+        || { echo "FAIL: Requires: crontabs not added" >&2; return 1; }
+    grep -q -- '- Require crontabs for cron.daily scripts' "$notes" \
+        || { echo "FAIL: crontabs require note missing" >&2; return 1; }
 
     # Idempotent after the swap.
     "$0" "$spec" "$src" "$notes"
@@ -652,8 +718,10 @@ done < <(discover_candidates "$SRC" | sort -u)
 
 drop_stale_sysconf "$SPEC" "$SRC"
 dropped=$(grep -c '^- Drop ' "$NOTES" || true)
+ensure_crontabs_requires "$SPEC"
+required=$(grep -c '^- Require crontabs' "$NOTES" || true)
 
-if [[ "$added" -eq 0 && "$dropped" -eq 0 ]]; then
+if [[ "$added" -eq 0 && "$dropped" -eq 0 && "$required" -eq 0 ]]; then
     echo "No %files changes needed"
 else
     echo "Added ${added} %files entr$( [[ "$added" -eq 1 ]] && echo y || echo ies ), dropped ${dropped} stale"
