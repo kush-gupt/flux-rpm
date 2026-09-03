@@ -252,12 +252,21 @@ jobs:
             fi
           done
 
+          # New plugins / commands / man-page sections the tarball
+          # installs are otherwise left out of %files, and rpmbuild
+          # then fails with "Installed (but unpackaged) file(s) found"
+          # (0.60.0 fairshare-emulate, 0.61.0 resource_quotas + man5).
+          : > /tmp/added_files.txt
+          ./scripts/sync-spec-files.sh \
+            "$SPEC" "${SRCDIR}/${PACKAGE}-${VERSION}" /tmp/added_files.txt
+
           DATE=$(date -u '+%a %b %d %Y')
           {
             echo "%changelog"
             echo "* ${DATE} github-actions[bot] <github-actions[bot]@users.noreply.github.com> - ${VERSION}-1"
             printf '%s\n' "$ENTRIES"
             cat /tmp/dropped_patches.txt
+            cat /tmp/added_files.txt
             echo ""
             sed -n '/%changelog/,$ { /%changelog/d; p }' "$SPEC"
           } > /tmp/changelog

@@ -99,6 +99,7 @@ flux-rpm/
 ├── flux-accounting/
 ├── scripts/
 │   ├── build-srpm.sh
+│   ├── sync-spec-files.sh
 │   └── update-specs.sh
 ├── FEDORA_CHANGES.md
 └── LICENSE
