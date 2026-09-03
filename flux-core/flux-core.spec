@@ -212,9 +212,8 @@ fi
 %{_tmpfilesdir}/flux.conf
 
 # cronfiles
-%dir %{_sysconfdir}/flux/system
-%dir %{_sysconfdir}/flux/system/cron.d
-%{_sysconfdir}/flux/system/cron.d/kvs-backup.cron
+%{_sysconfdir}/cron.daily/50-flux-dump
+%{_sysconfdir}/cron.daily/51-flux-gc
 
 # bash completions
 %{_datadir}/bash-completion/completions/flux
@@ -279,6 +278,9 @@ fi
 - Fix: libpmi: conform to recent RFC 13 version handshake changes
 - Fix: fix mismatched pack/unpack format specifiers and arguments
 - Fix: fix segfault in flux job eventlog --follow
+- Package 50-flux-dump (cron.daily)
+- Package 51-flux-gc (cron.daily)
+- Drop kvs-backup.cron (no longer installed)
 
 * Mon Aug 10 2026 Cursor Agent <cursoragent@cursor.com> - 0.88.0-2
 - Add Obsoletes/Provides for the python3-flux subpackage merged into the

@@ -252,10 +252,13 @@ jobs:
             fi
           done
 
-          # New plugins / commands / man-page sections the tarball
-          # installs are otherwise left out of %files, and rpmbuild
-          # then fails with "Installed (but unpackaged) file(s) found"
-          # (0.60.0 fairshare-emulate, 0.61.0 resource_quotas + man5).
+          # New plugins / commands / man-page sections / cron scripts
+          # the tarball installs are otherwise left out of %files, and
+          # rpmbuild then fails with "Installed (but unpackaged)
+          # file(s) found" (0.60.0 fairshare-emulate, 0.61.0
+          # resource_quotas + man5, 0.89.0 cron.daily dump/gc). Stale
+          # sysconf paths the tarball no longer ships are dropped
+          # (0.89.0 kvs-backup.cron).
           : > /tmp/added_files.txt
           ./scripts/sync-spec-files.sh \
             "$SPEC" "${SRCDIR}/${PACKAGE}-${VERSION}" /tmp/added_files.txt
