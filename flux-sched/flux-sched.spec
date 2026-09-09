@@ -1,5 +1,5 @@
 Name:    flux-sched
-Version: 0.54.0
+Version: 0.55.0
 Release: 1%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
@@ -128,6 +128,12 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
+* Wed Sep 09 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.55.0-1
+- Update to v0.55.0
+- qmanager: support RFC 33 virtual queues
+- Fix: Sweep vertices by jobid to ensure partial cancel correctness
+- Fix: reapi: reopen interners for constructor graph load
+
 * Tue Aug 11 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.54.0-1
 - Update to v0.54.0
 - Add match_without_allocating match option
