@@ -30,7 +30,9 @@ BuildRequires: pkgconfig(uuid)
 BuildRequires: pkgconfig(ncurses)
 BuildRequires: pkgconfig(libarchive)
 BuildRequires: pkgconfig(systemd)
-BuildRequires: (lua-devel >= 5.1 and lua-devel < 5.5)
+# flux-core 0.89.0 supports Lua up to 5.5 (AX_PROG_LUA([5.1],[5.5])), and
+# Fedora rawhide ships lua-posix built against Lua 5.5; see #36.
+BuildRequires: (lua-devel >= 5.1 and lua-devel < 5.6)
 BuildRequires: munge-devel
 BuildRequires: lua-posix
 
