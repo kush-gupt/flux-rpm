@@ -110,86 +110,117 @@ jobs:
       - name: Generate changelog from upstream NEWS
         if: steps.check.outputs.latest != ''
         id: changelog
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.check.outputs.latest }}"
           PACKAGE="${{ matrix.package }}"
 
           NEWS=$(curl -sf --retry 3 "https://raw.githubusercontent.com/flux-framework/${PACKAGE}/v${VERSION}/NEWS.md") || {
-            echo "::warning::Could not fetch NEWS.md, using minimal changelog"
-            echo "- Update to v${VERSION}" > /tmp/changelog_entries.txt
-            { echo "entries<<CHANGELOG_EOF"; cat /tmp/changelog_entries.txt; echo "CHANGELOG_EOF"; } >> $GITHUB_OUTPUT
-            exit 0
+            echo "::warning::Could not fetch NEWS.md for ${PACKAGE} ${VERSION}"
+            NEWS=""
           }
 
           # Extract the section for this version (between consecutive version headers).
           # Header format: "PACKAGE version X.Y.Z - DATE" followed by a line of dashes.
           # Use awk for robustness across all flux-* projects.
-          ESCAPED_VER=$(echo "$VERSION" | sed 's/\./\\./g')
-          SECTION=$(echo "$NEWS" | awk "
-            /^${PACKAGE} version ${ESCAPED_VER}/ { found=1; next }
-            found && /^${PACKAGE} version [0-9]/ { exit }
-            found && /^---/ { next }
-            found { print }
-          ")
-
-          if [ -z "$SECTION" ]; then
-            echo "::warning::Could not extract NEWS section for ${VERSION}"
-            echo "- Update to v${VERSION}" > /tmp/changelog_entries.txt
-            { echo "entries<<CHANGELOG_EOF"; cat /tmp/changelog_entries.txt; echo "CHANGELOG_EOF"; } >> $GITHUB_OUTPUT
-            exit 0
+          FROM_RELEASE_BODY=0
+          SECTION=""
+          if [ -n "$NEWS" ]; then
+            ESCAPED_VER=$(echo "$VERSION" | sed 's/\./\\./g')
+            SECTION=$(echo "$NEWS" | awk "
+              /^${PACKAGE} version ${ESCAPED_VER}/ { found=1; next }
+              found && /^${PACKAGE} version [0-9]/ { exit }
+              found && /^---/ { next }
+              found { print }
+            ")
           fi
 
-          # Extract feature headlines (handles ##, ###, #### and both
-          # "New Features" and "Features" section names).
-          # Join continuation lines (non-bullet lines following a bullet)
-          # so multi-line entries are not truncated.
-          FEATURES=$(echo "$SECTION" | awk '
-            /^#{2,4} (New )?Features/ { in_sect=1; next }
-            /^#{2,4} / { if (buf) { print buf; buf="" }; in_sect=0 }
-            in_sect && /^ {0,1}\* / {
-              if (buf) print buf
-              buf = $0
-              next
-            }
-            in_sect && buf && /[^ ]/ && !/^ {0,1}\* / {
-              sub(/^[[:space:]]+/, "")
-              buf = buf " " $0
-              next
-            }
-            END { if (buf) print buf }
-          ' | head -5 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//; s/`//g')
+          if [ -z "$SECTION" ]; then
+            # Fall back to the GitHub release notes ("What's Changed" bullets).
+            echo "::warning::No NEWS.md section for ${VERSION}; trying release notes"
+            RBODY=$(curl -sf --retry 3 \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/flux-framework/${PACKAGE}/releases/tags/v${VERSION}" \
+              | jq -r '.body // empty') || RBODY=""
+            SECTION=$(echo "$RBODY" | awk '
+              /^## What/ { in_sect=1; next }
+              in_sect && /^## / { exit }
+              in_sect && /^[*-] / { print }
+            ' | head -8)
+            [ -n "$SECTION" ] && FROM_RELEASE_BODY=1
+          fi
 
-          # Extract fix headlines (handles ##, ###, ####)
-          FIXES=$(echo "$SECTION" | awk '
-            /^#{2,4} Fixes/ { in_sect=1; next }
-            /^#{2,4} / { if (buf) { print buf; buf="" }; in_sect=0 }
-            in_sect && /^ {0,1}\* / {
-              if (buf) print buf
-              buf = $0
-              next
-            }
-            in_sect && buf && /[^ ]/ && !/^ {0,1}\* / {
-              sub(/^[[:space:]]+/, "")
-              buf = buf " " $0
-              next
-            }
-            END { if (buf) print buf }
-          ' | head -3 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//; s/`//g')
+          if [ -z "$SECTION" ]; then
+            echo "::warning::No usable release notes for ${VERSION}"
+            echo "- Update to v${VERSION}" > /tmp/changelog_entries.txt
+            HIGHLIGHTS="_No structured highlights extracted — see the release notes link in the PR._"
+          else
+            if [ "$FROM_RELEASE_BODY" = "1" ]; then
+              # Flat "What's Changed" bullets need no section parsing.
+              FEATURES=$(echo "$SECTION" | sed 's/^[*-] //; s/ (#[0-9,# ]*)$//; s/`//g')
+              FIXES=""
+            else
+              # Extract feature headlines (handles ##, ###, #### and both
+              # "New Features" and "Features" section names).
+              # Join continuation lines (non-bullet lines following a bullet)
+              # so multi-line entries are not truncated.
+              FEATURES=$(echo "$SECTION" | awk '
+                /^#{2,4} (New )?Features/ { in_sect=1; next }
+                /^#{2,4} / { if (buf) { print buf; buf="" }; in_sect=0 }
+                in_sect && /^ {0,1}\* / {
+                  if (buf) print buf
+                  buf = $0
+                  next
+                }
+                in_sect && buf && /[^ ]/ && !/^ {0,1}\* / {
+                  sub(/^[[:space:]]+/, "")
+                  buf = buf " " $0
+                  next
+                }
+                END { if (buf) print buf }
+              ' | head -5 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//; s/`//g')
 
-          # Build changelog entries
-          {
-            echo "- Update to v${VERSION}"
-            if [ -n "$FEATURES" ]; then
-              echo "$FEATURES" | while IFS= read -r line; do
-                [ -n "$line" ] && echo "- $line"
-              done
+              # Extract fix headlines (handles ##, ###, ####)
+              FIXES=$(echo "$SECTION" | awk '
+                /^#{2,4} Fixes/ { in_sect=1; next }
+                /^#{2,4} / { if (buf) { print buf; buf="" }; in_sect=0 }
+                in_sect && /^ {0,1}\* / {
+                  if (buf) print buf
+                  buf = $0
+                  next
+                }
+                in_sect && buf && /[^ ]/ && !/^ {0,1}\* / {
+                  sub(/^[[:space:]]+/, "")
+                  buf = buf " " $0
+                  next
+                }
+                END { if (buf) print buf }
+              ' | head -3 | sed 's/^ *\* //; s/ (#[0-9,#]*)$//; s/`//g')
             fi
-            if [ -n "$FIXES" ]; then
-              echo "$FIXES" | while IFS= read -r line; do
-                [ -n "$line" ] && echo "- Fix: $line"
-              done
+
+            # Build changelog entries
+            {
+              echo "- Update to v${VERSION}"
+              if [ -n "$FEATURES" ]; then
+                echo "$FEATURES" | while IFS= read -r line; do
+                  [ -n "$line" ] && echo "- $line"
+                done
+              fi
+              if [ -n "$FIXES" ]; then
+                echo "$FIXES" | while IFS= read -r line; do
+                  [ -n "$line" ] && echo "- Fix: $line"
+                done
+              fi
+            } > /tmp/changelog_entries.txt
+
+            # Highlights for the PR body, captured before RPM % escaping.
+            HIGHLIGHTS=$(tail -n +2 /tmp/changelog_entries.txt)
+            if [ -z "$HIGHLIGHTS" ]; then
+              HIGHLIGHTS="_No structured highlights extracted — see the release notes link in the PR._"
             fi
-          } > /tmp/changelog_entries.txt
+          fi
 
           # rpmbuild expands %macros inside %changelog too; escape any
           # literal % from the upstream notes (e.g. "50% faster").
@@ -199,8 +230,10 @@ jobs:
           cat /tmp/changelog_entries.txt
 
           { echo "entries<<CHANGELOG_EOF"; cat /tmp/changelog_entries.txt; echo "CHANGELOG_EOF"; } >> $GITHUB_OUTPUT
+          { echo "highlights<<HIGHLIGHTS_EOF"; echo "$HIGHLIGHTS"; echo "HIGHLIGHTS_EOF"; } >> $GITHUB_OUTPUT
 
       - name: Update spec and sources
+        id: update-spec
         if: steps.check.outputs.latest != ''
         env:
           # Derived from the upstream NEWS.md: third-party text, so hand
@@ -233,10 +266,15 @@ jobs:
           SRCDIR=$(mktemp -d)
           tar -xzf "$TARBALL" -C "$SRCDIR"
           : > /tmp/dropped_patches.txt
-          grep -E '^Patch[0-9]*:' "$SPEC" | awk '{print $2}' | while IFS= read -r patchfile; do
+          : > /tmp/patch_warnings.txt
+          dropped=0; kept=0; flagged=0
+          # Process substitution (not a pipeline) so the counters below
+          # survive the loop.
+          while IFS= read -r patchfile; do
             # --fuzz=0 matches how rpmbuild %autosetup applies patches
             if patch -p1 -d "${SRCDIR}/${PACKAGE}-${VERSION}" --dry-run --fuzz=0 -N -s -f < "${PACKAGE}/${patchfile}" >/dev/null 2>&1; then
               echo "Patch still applies cleanly, keeping: ${patchfile}"
+              kept=$((kept + 1))
             elif patch -p1 -R -d "${SRCDIR}/${PACKAGE}-${VERSION}" --dry-run --fuzz=0 -s -f < "${PACKAGE}/${patchfile}" >/dev/null 2>&1; then
               echo "Patch already applied upstream, dropping: ${patchfile}"
               awk -v patchfile="$patchfile" '
@@ -247,10 +285,13 @@ jobs:
               ' "$SPEC" > "${SPEC}.tmp" && mv "${SPEC}.tmp" "$SPEC"
               rm -f "${PACKAGE}/${patchfile}"
               echo "- Drop ${patchfile} (applied upstream in ${VERSION})" >> /tmp/dropped_patches.txt
+              dropped=$((dropped + 1))
             else
               echo "::warning::Patch ${patchfile} does not apply cleanly to ${PACKAGE} ${VERSION}; manual review needed"
+              echo "- ${patchfile} does not apply cleanly to ${VERSION}; manual review needed" >> /tmp/patch_warnings.txt
+              flagged=$((flagged + 1))
             fi
-          done
+          done < <(grep -E '^Patch[0-9]*:' "$SPEC" | awk '{print $2}')
 
           # New plugins / commands / man-page sections / cron scripts
           # the tarball installs are otherwise left out of %files, and
@@ -275,6 +316,137 @@ jobs:
           } > /tmp/changelog
           sed -i '/%changelog/,$ d' "$SPEC"
           cat /tmp/changelog >> "$SPEC"
+
+          # Summaries for the PR body.
+          {
+            echo "patch_summary<<PATCH_EOF"
+            echo "Patches: ${dropped} dropped (applied upstream), ${kept} still apply cleanly, ${flagged} need manual review"
+            echo "PATCH_EOF"
+            echo "patch_warnings<<WARN_EOF"
+            cat /tmp/patch_warnings.txt
+            echo "WARN_EOF"
+            echo "packaging_notes<<NOTES_EOF"
+            if [ -s /tmp/dropped_patches.txt ] || [ -s /tmp/added_files.txt ]; then
+              cat /tmp/dropped_patches.txt /tmp/added_files.txt
+            else
+              echo "No packaging changes needed beyond the version bump."
+            fi
+            echo "NOTES_EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Check for new upstream build dependencies
+        id: deps
+        if: steps.check.outputs.latest != ''
+        run: |
+          PACKAGE="${{ matrix.package }}"
+          CURRENT="${{ steps.check.outputs.current }}"
+          LATEST="${{ steps.check.outputs.latest }}"
+          SPEC="${PACKAGE}/${PACKAGE}.spec"
+          NEW_TARBALL="/tmp/${PACKAGE}-${LATEST}.tar.gz"
+          OLD_TARBALL="/tmp/${PACKAGE}-${CURRENT}.tar.gz"
+
+          # Map an upstream dependency token to the RPM capability the
+          # spec should BuildRequire. Empty output = not mapped (skipped).
+          # Best-effort and informational only: findings are reported in
+          # the PR body for a human to verify, never auto-edited.
+          map_dep() {
+            case "$(echo "$1" | tr '[:upper:]' '[:lower:]')" in
+              jansson|hwloc|libarchive|libsodium|libzmq|czmq|sqlite3|uuid|libuuid|ncursesw|liblz4|libsystemd|bash-completion|flux-security)
+                echo "pkgconfig($1)" ;;
+              lua) echo "lua-devel" ;;
+              boost) echo "boost-devel" ;;
+              python3|python) echo "python3-devel" ;;
+              fluxcore) echo "pkgconfig(flux-core)" ;;
+              *) echo "" ;;
+            esac
+          }
+
+          # Best-effort dependency tokens from the upstream build system.
+          # Autotools: PKG_CHECK_MODULES module lists (+ lua macros).
+          # CMake: find_package() names.
+          extract_deps() {
+            local dir=$1
+            if [ -f "$dir/configure.ac" ]; then
+              grep -h 'PKG_CHECK_MODULES' "$dir/configure.ac" 2>/dev/null | \
+                sed -n -E 's/.*PKG_CHECK_MODULES\(\[[^]]+\],[[:space:]]*\[([^]]*)\].*/\1/p' | \
+                tr ' ' '\n' | grep -E '^[a-z][a-z0-9+._-]*$' | grep -v -E '^(ge|le|eq|gt|lt)$'
+              grep -q -E 'AX_LUA_(HEADERS|LIBS)' "$dir/configure.ac" 2>/dev/null && echo lua
+            elif [ -f "$dir/CMakeLists.txt" ]; then
+              grep -rhoP 'find_package\(\s*\K[A-Za-z0-9_+-]+' "$dir" --include=CMakeLists.txt 2>/dev/null
+            fi
+          }
+
+          # Test-only / documentation helpers are not packaging deps.
+          denylist='^(catch2|doxygen|sanitizers|codecov|pkgconfig)$'
+
+          NEW_DEPS=""
+          if [ ! -f "$OLD_TARBALL" ]; then
+            echo "::warning::Current-version tarball not cached; downloading for dependency comparison"
+            curl -sfL -o "$OLD_TARBALL" \
+              "https://github.com/flux-framework/${PACKAGE}/releases/download/v${CURRENT}/${PACKAGE}-${CURRENT}.tar.gz" || OLD_TARBALL=""
+          fi
+
+          if [ -n "$OLD_TARBALL" ] && [ -f "$OLD_TARBALL" ] && [ -f "$NEW_TARBALL" ]; then
+            OLD_SRC=$(mktemp -d); NEW_SRC=$(mktemp -d)
+            tar -xzf "$OLD_TARBALL" -C "$OLD_SRC"
+            # Re-extracting the new tarball keeps this step self-contained
+            # (the spec-update step extracted it earlier in this job).
+            tar -xzf "$NEW_TARBALL" -C "$NEW_SRC"
+            OLD_DIR=$(find "$OLD_SRC" -maxdepth 1 -mindepth 1 -type d | head -1)
+            NEW_DIR=$(find "$NEW_SRC" -maxdepth 1 -mindepth 1 -type d | head -1)
+            extract_deps "$OLD_DIR" | grep -v -E -i "$denylist" | sort -u > /tmp/old_deps.txt || true
+            extract_deps "$NEW_DIR" | grep -v -E -i "$denylist" | sort -u > /tmp/new_deps.txt || true
+            while IFS= read -r dep; do
+              [ -n "$dep" ] || continue
+              cap=$(map_dep "$dep")
+              [ -n "$cap" ] || continue
+              if ! grep -qi "^BuildRequires:.*${cap}" "$SPEC"; then
+                NEW_DEPS="${NEW_DEPS}- [ ] Upstream added a build dependency on **${dep}** — no matching \`BuildRequires: ${cap}\` in the spec; please verify.\n"
+              fi
+            done < <(comm -13 /tmp/old_deps.txt /tmp/new_deps.txt)
+            rm -rf "$OLD_SRC" "$NEW_SRC"
+          else
+            echo "::warning::Could not compare upstream dependencies (tarball missing)"
+          fi
+
+          if [ -z "$NEW_DEPS" ]; then
+            NEW_DEPS="No new upstream build dependencies detected in this release."
+          fi
+          printf '%b\n' "$NEW_DEPS"
+          { echo "new_deps<<DEPS_EOF"; printf '%b\n' "$NEW_DEPS"; echo "DEPS_EOF"; } >> $GITHUB_OUTPUT
+
+      - name: Validate updated spec
+        if: steps.check.outputs.latest != ''
+        run: |
+          # Run the same checks CI will run (the spec-validation job in
+          # build-test.yml) before the PR is opened, so an update PR never
+          # opens with a broken spec. Same Fedora container approach.
+          podman run -d --name specvalidate -v "$PWD:/work" -w /work \
+            fedora:latest sleep infinity
+          podman exec specvalidate dnf install -y -q rpm-build glibc-langpack-en
+          podman exec -i specvalidate bash -s <<'EOF'
+          set -euo pipefail
+          SPEC="${{ matrix.package }}/${{ matrix.package }}.spec"
+          echo "Parsing: $SPEC"
+          rpmspec -P "$SPEC" > /dev/null
+          echo "  spec parses OK"
+          for field in "^Name:" "^Version:" "^Release:" "^License:" "^URL:" "^Source0:" "^%description" "^%changelog"; do
+            grep -q "$field" "$SPEC" || { echo "::error::Missing $field in $SPEC"; exit 1; }
+          done
+          echo "  required fields present"
+          BAD=$(sed -n '/%changelog/,$ p' "$SPEC" | grep -E '^\* ' | \
+            grep -vE '^\* (Mon|Tue|Wed|Thu|Fri|Sat|Sun) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +[0-9]{1,2} [0-9]{4} .+ - [^ ]+$' || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::Malformed changelog entry header(s) in $SPEC:"
+            echo "$BAD"
+            exit 1
+          fi
+          echo "  changelog format OK"
+          EOF
+
+      - name: Remove validation container
+        if: always()
+        run: podman rm -f -t 0 specvalidate 2>/dev/null || true
 
       - name: Find or create tracking issue
         id: create-issue
@@ -323,13 +495,30 @@ jobs:
 
             Closes #${{ steps.create-issue.outputs.issue-number }}
 
-            Please review:
-            - [ ] Check release notes for spec file changes
-            - [ ] Verify patches are still needed for this version
-            - [ ] Verify BuildRequires are still correct
-            - [ ] Test build locally if possible
+            ### Upstream highlights
+            ${{ steps.changelog.outputs.highlights }}
+
+            ### Automated checks
+            - [x] Spec validation passed (`rpmspec` parse, required fields, changelog format)
+            - [x] ${{ steps.update-spec.outputs.patch_summary }}
+            - [x] `%files` synced against the new release tarball
+
+            ### Build dependencies
+            ${{ steps.deps.outputs.new_deps }}
+
+            ### Packaging changes in this PR
+            ${{ steps.update-spec.outputs.packaging_notes }}
+            ${{ steps.update-spec.outputs.patch_warnings }}
+
+            ### Still needs a human
+            - [ ] Skim the release notes for behavior or config changes that affect packaging
+
+            ---
+            *Opened by the Check for Updates workflow. The build matrix runs automatically on this PR.*
           branch: update-${{ matrix.package }}-${{ steps.check.outputs.latest }}
           delete-branch: true
+          labels: dependencies, ${{ matrix.package }}
+          assignees: ${{ github.repository_owner }}
 
       - name: Trigger build CI on PR branch
         # Only when this run actually created or refreshed the PR;
