@@ -1,5 +1,5 @@
 Name:    flux-accounting
-Version: 0.61.0
+Version: 0.62.0
 Release: 1%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
@@ -111,6 +111,7 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_libexecdir}/flux/cmd/flux-account-fetch-job-records.py
 %{_libexecdir}/flux/cmd/flux-account-update-usage.py
 %{_libexecdir}/flux/cmd/flux-account-fairshare-emulate.py
+%{_libexecdir}/flux/cmd/flux-account-rebuild-project-usage.py
 
 # rc hook: executable script, so intentionally not %%config (rpmlint
 # executable-marked-as-config-file; stale local edits would break priority
@@ -125,6 +126,17 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*.5*
 
 %changelog
+* Thu Oct 08 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.62.0-1
+- Update to v0.62.0
+- edit-all-users: add --[add|delete]-queue optional arguments
+- update-usage: aggregate project usage during a usage update
+- resource-quotas: config and enforcement
+- usage: abstract usage calculation into classes
+- Fix: edit-config: make usage-bin reconfiguration atomic
+- Fix: bindings: reorganize Python accounting module
+- Fix: plugin: prepare checks for limits that span associations
+- Package flux-account-rebuild-project-usage.py (new upstream command)
+
 * Wed Sep 02 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.61.0-1
 - Update to v0.61.0
 - database: add new max-[nodes|cores] per-queue option
