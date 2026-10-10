@@ -274,6 +274,10 @@ jobs:
           - distro: fedora-45
             mock-release: fedora-45-x86_64
             short-name: f45
+            # lua-devel >= 5.1, < 5.5 is unsatisfiable on f45 (same as
+            # rawhide); upstream flux-core also caps lua at < 5.5, so
+            # tolerate the failure instead of changing the spec.
+            allow-failure: true
           - distro: fedora-rawhide
             mock-release: fedora-rawhide-x86_64
             short-name: rawhide
@@ -697,6 +701,9 @@ jobs:
           - distro: fedora-45
             image: fedora:45
             short-name: f45
+            # Mirrors the build-all allow-failure: without flux-core RPMs
+            # the smoke install cannot succeed on f45.
+            allow-failure: true
           - distro: fedora-rawhide
             image: fedora:rawhide
             short-name: rawhide
