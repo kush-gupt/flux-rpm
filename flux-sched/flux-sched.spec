@@ -102,9 +102,15 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 # rc1,3 hooks for fluxion: executable scripts, so intentionally not %%config
 # (rpmlint executable-marked-as-config-file; stale local edits would break
 # module loading on upgrade)
+# rpmlint filters:
+#   non-conffile-in-etc /etc/flux/rc1.d/01-sched-fluxion
+#   non-conffile-in-etc /etc/flux/rc3.d/01-sched-fluxion
 %{_sysconfdir}/flux/rc1.d/01-sched-fluxion
 %{_sysconfdir}/flux/rc3.d/01-sched-fluxion
 %config(noreplace) %{_sysconfdir}/flux/modprobe/modprobe.d/fluxion.toml
+# fluxion.py: Python plugin module (code), not config; intentionally not %config.
+# rpmlint filters:
+#   non-conffile-in-etc /etc/flux/modprobe/rc1.d/fluxion.py
 %{_sysconfdir}/flux/modprobe/rc1.d/fluxion.py
 %{_libdir}/flux/modules/sched-fluxion-qmanager.so
 %{_libdir}/flux/modules/sched-fluxion-resource.so
