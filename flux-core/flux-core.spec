@@ -1,5 +1,5 @@
 Name:    flux-core
-Version: 0.89.0
+Version: 0.90.0
 Release: 1%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
@@ -271,6 +271,17 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Thu Oct 08 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.90.0-1
+- Update to v0.90.0
+- rewrite flux-run-{prolog,epilog,housekeeping} in Python and restrict environment
+- flux-sproc: add more information to ps output
+- allow signal sent at job expiration to be overridden with --signal=SIG@0
+- sdexec: derive unique unit name from subprocess label
+- job-manager: add queues.update jobtap callback
+- Fix: shell: require J to be signed by the shell's user
+- Fix: libsubprocess: enforce signing mechanism when request signing required in subprocess server
+- Fix: fix sudo flux sproc failure on system instance
+
 * Thu Sep 03 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.89.0-1
 - Update to v0.89.0
 - kvs: enable nightly garbage collection on system instance
