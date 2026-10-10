@@ -116,6 +116,8 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 # rc hook: executable script, so intentionally not %%config (rpmlint
 # executable-marked-as-config-file; stale local edits would break priority
 # updates on upgrade)
+# rpmlint filters:
+#   non-conffile-in-etc /etc/flux/rc1.d/01-flux-account-priority-update
 %{_sysconfdir}/flux/rc1.d/01-flux-account-priority-update
 
 # systemd unit file
