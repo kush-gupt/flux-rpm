@@ -214,7 +214,11 @@ fi
 # tmpfiles config
 %{_tmpfilesdir}/flux.conf
 
-# cronfiles
+# cronfiles: executable scripts run by cron, not config files.
+# Intentionally not %config (would trigger executable-marked-as-config-file).
+# rpmlint filters:
+#   non-conffile-in-etc /etc/cron.daily/50-flux-dump
+#   non-conffile-in-etc /etc/cron.daily/51-flux-gc
 %{_sysconfdir}/cron.daily/50-flux-dump
 %{_sysconfdir}/cron.daily/51-flux-gc
 
@@ -249,6 +253,11 @@ fi
 %dir %{_sysconfdir}/flux/shell/lua.d
 %dir %{_sysconfdir}/flux/shell/lua.d/mpi
 %config(noreplace) %{_sysconfdir}/flux/shell/initrc.lua
+# lua.d plugins: shipped Lua plugin code loaded by the shell, not user config.
+# (initrc.lua above is the user-customizable entry point and is %config.)
+# Intentionally not %config.
+# rpmlint filters:
+#   non-conffile-in-etc /etc/flux/shell/lua.d/
 %{_sysconfdir}/flux/shell/lua.d/*.lua
 %{_sysconfdir}/flux/shell/lua.d/mpi/*.lua
 
