@@ -1,5 +1,5 @@
 Name:    flux-core
-Version: 0.90.0
+Version: 0.91.0
 Release: 1%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
@@ -280,6 +280,17 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Wed Nov 04 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.91.0-1
+- Update to v0.91.0
+- jobtap: add flux_jobtap_dependency_check () for checking a dependency in a job
+- shell: add support for PMI-1.2 and group barriers
+- shell: factor out PMI kvs for use by other process managers
+- support queue membership by hostlist
+- python: add parse_timestamp()
+- Fix: broker: stop shutdown timer on entry to FINALIZE
+- Fix: libresourcecount: validate min for '^' operator and add libresourcecount_bounded_last ()
+- Fix: libsubprocess: check error paths
+
 * Thu Oct 08 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.90.0-1
 - Update to v0.90.0
 - rewrite flux-run-{prolog,epilog,housekeeping} in Python and restrict environment
