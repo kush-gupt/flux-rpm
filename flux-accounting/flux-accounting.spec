@@ -1,5 +1,5 @@
 Name:    flux-accounting
-Version: 0.62.0
+Version: 0.63.0
 Release: 1%{?dist}
 Summary: Bank/Accounting Interface for the Flux Resource Manager
 License: LGPL-3.0-only
@@ -128,6 +128,15 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*.5*
 
 %changelog
+* Wed Nov 04 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.63.0-1
+- Update to v0.63.0
+- job usage: add a "continuous" usage decay mode
+- cmd: add new estimate-priority command
+- view-usage-report: add byjobname grouping
+- Fix: plugin: remove max_nodes_per_assoc as dependency
+- Fix: plugin: fix queue priority bug, separate queue validation from queue priority access
+- Fix: usage: don't double-count past usage in period 0
+
 * Thu Oct 08 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.62.0-1
 - Update to v0.62.0
 - edit-all-users: add --[add|delete]-queue optional arguments
