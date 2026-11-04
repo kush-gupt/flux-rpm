@@ -101,7 +101,7 @@ Development files for %{name}.
 
 %prep
 %autosetup -n %{name}-%{version} -p1
-autoreconf -fi
+FLUX_VERSION=%{version} autoreconf -fi
 
 %build
 export LC_ALL=en_US.UTF-8
