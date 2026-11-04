@@ -8,6 +8,15 @@
 # same gap that needed a follow-up for flux-account-fairshare-emulate
 # in 0.60.0 and that broke the 0.61.0 accounting bump.
 #
+# Top-level shared libraries are discovered in their versioned form
+# (libfoo.so.<current-age> plus the full version name) from each
+# library's -version-info, and pkg-config files from pkgconfig_DATA.
+# The flux-core 0.91.0 bump proved both classes invisible to the
+# earlier version: the unversioned .so candidate was swallowed by the
+# devel subpackage's %{_libdir}/*.so glob, and pkgconfig was skipped
+# outright, so libflux-resourcecount and flux-resourcecount.pc shipped
+# unpackaged while the PR claimed %files was synced.
+#
 # Usage: sync-spec-files.sh SPEC SRC_TREE [NOTES_FILE]
 #
 # NOTES_FILE (default: /tmp/added_files.txt) receives changelog bullets
@@ -75,6 +84,58 @@ resolve_am_dir() {
     echo "$raw"
 }
 
+# Resolve an autoconf variable (e.g. LIBFLUX_IDSET_VERSION_INFO) from
+# configure.ac, expanding $COMPONENT references. Prints the resolved
+# value, or nothing when it cannot be fully resolved.
+resolve_ac_var() {
+    local cac=$1 var=$2 val name cval
+    [[ -f "$cac" ]] || return 0
+    val=$(sed -n "s/^${var}=//p" "$cac" | tail -n1)
+    [[ -n "$val" ]] || return 0
+    for _ in 1 2 3 4 5; do
+        [[ "$val" == *'$'* ]] || break
+        if [[ "$val" =~ \$[{]?([A-Za-z_][A-Za-z0-9_]*)[}]? ]]; then
+            name=${BASH_REMATCH[1]}
+        else
+            return 0
+        fi
+        cval=$(sed -n "s/^${name}=//p" "$cac" | tail -n1)
+        [[ -n "$cval" ]] || return 0
+        val=${val//\$\{$name\}/$cval}
+        val=${val//\$$name/$cval}
+    done
+    [[ "$val" == *'$'* ]] && return 0
+    echo "$val"
+}
+
+# For a top-level libtool library <base> (e.g. libflux-idset), print
+# the versioned %files candidates derived from its -version-info in
+# the same Makefile.am: libtool installs lib<base>.so.<current-age>
+# and lib<base>.so.<current-age>.<age>.<revision> alongside the
+# unversioned devel symlink.
+emit_versioned_lib() {
+    local src=$1 vars=$2 base=$3
+    local stem ldflags vi cur rev age major
+    stem=${base//[!A-Za-z0-9]/_}
+    ldflags=$(echo "$vars" | sed -n "s/^${stem}_la_LDFLAGS[[:space:]]*=[[:space:]]*//p" | tail -n1)
+    [[ -n "$ldflags" ]] || return 0
+    vi=$(echo "$ldflags" | sed -n 's/.*-version-info[[:space:]][[:space:]]*\([^[:space:]]\+\).*/\1/p')
+    [[ -n "$vi" ]] || return 0
+    if [[ "$vi" == @*@ ]]; then
+        vi=$(resolve_ac_var "$src/configure.ac" "${vi//@/}")
+    fi
+    if [[ ! "$vi" =~ ^([0-9]+):([0-9]+):([0-9]+)$ ]]; then
+        echo "WARNING: could not resolve -version-info for ${base}; versioned library files may be missed" >&2
+        return 0
+    fi
+    cur=${BASH_REMATCH[1]}
+    rev=${BASH_REMATCH[2]}
+    age=${BASH_REMATCH[3]}
+    major=$((cur - age))
+    printf '%s\t%s\n' "%{_libdir}/${base}.so.${major}" library
+    printf '%s\t%s\n' "%{_libdir}/${base}.so.${major}.${age}.${rev}" library
+}
+
 # Collect "path<TAB>kind" candidates from an extracted source tree.
 # kind is plugin|command|rc|unit|cron|manN — used for insertion + changelog.
 discover_candidates() {
@@ -92,19 +153,30 @@ discover_candidates() {
                 noinst|check|EXTRA) continue ;;
             esac
             dir_val=$(echo "$vars" | sed -n "s/^${prefix}dir[[:space:]]*=[[:space:]]*//p" | tail -n1)
-            [[ -n "$dir_val" ]] || continue
-            dest=$(resolve_am_dir "$dir_val") || continue
-            [[ -n "$dest" ]] || continue
+            if [[ -n "$dir_val" ]]; then
+                dest=$(resolve_am_dir "$dir_val") || continue
+                [[ -n "$dest" ]] || continue
+            else
+                # Automake built-in install dirs are never defined in
+                # Makefile.am itself. There is no libdir line to
+                # resolve, which is why top-level libraries used to be
+                # skipped by this loop entirely.
+                case "$prefix" in
+                    lib) dest="%{_libdir}" ;;
+                    libexec) dest="%{_libexecdir}" ;;
+                    *) continue ;;
+                esac
+            fi
             for item in ${BASH_REMATCH[2]}; do
                 [[ "$item" == *.la ]] || continue
                 base="${item##*/}"
                 base="${base%.la}"
-                if [[ "$dest" == *job-manager/plugins* ]]; then
-                    printf '%s\t%s\n' "${dest}/${base}.so" plugin
-                elif [[ "$dest" == *flux/modules* ]]; then
-                    printf '%s\t%s\n' "${dest}/${base}.so" plugin
-                else
-                    printf '%s\t%s\n' "${dest}/${base}.so" plugin
+                printf '%s\t%s\n' "${dest}/${base}.so" plugin
+                # A library installed into the top-level libdir also
+                # lands in versioned form in the main package; the
+                # unversioned .so above is only the devel symlink.
+                if [[ "$dest" == "%{_libdir}" ]]; then
+                    emit_versioned_lib "$src" "$vars" "$base"
                 fi
             done
         done <<< "$vars"
@@ -168,6 +240,27 @@ discover_candidates() {
                 if [[ "$dest" == *cron* ]]; then
                     printf '%s\t%s\n' "${dest}/${base}" cron
                 fi
+            done
+        done <<< "$vars"
+
+        # pkg-config files (devel subpackage). The generic DATA loop
+        # below skips the pkgconfig prefix, which is how
+        # flux-resourcecount.pc slipped through in flux-core 0.91.0.
+        while IFS= read -r line; do
+            [[ "$line" =~ ^(dist_|nodist_)?pkgconfig_DATA[[:space:]]*=[[:space:]]*(.*)$ ]] || continue
+            items=${BASH_REMATCH[2]}
+            dir_val=$(echo "$vars" | sed -n "s/^pkgconfigdir[[:space:]]*=[[:space:]]*//p" | tail -n1)
+            dest="%{_libdir}/pkgconfig"
+            if [[ -n "$dir_val" ]]; then
+                dest=$(resolve_am_dir "$dir_val") || continue
+                [[ -n "$dest" ]] || continue
+            fi
+            for item in $items; do
+                base="${item##*/}"
+                base="${base%.in}"
+                [[ "$base" == *.pc ]] || continue
+                [[ "$base" != *'$'* ]] || continue
+                printf '%s\t%s\n' "${dest}/${base}" pc
             done
         done <<< "$vars"
 
@@ -264,6 +357,13 @@ spec_covers() {
         esac
         entry=$(normalize_files_entry "$raw")
         [[ -n "$entry" ]] || continue
+        # Specs spell the main library and pkg-config file with the
+        # %{name} macro (lib%{name}.so.2, pkgconfig/%{name}.pc).
+        # Expand it, or those files look perpetually unpackaged and
+        # get duplicated into %files on every run.
+        if [[ -n "${SPEC_NAME:-}" ]]; then
+            entry=${entry//%\{name\}/$SPEC_NAME}
+        fi
 
         # Exact path
         [[ "$entry" == "$candidate" ]] && return 0
@@ -283,9 +383,12 @@ spec_covers() {
     return 1
 }
 
-# Insert a new %files line next to related entries in the *main*
-# %files section (not %files devel). Falls back to the end of that
-# section — just before the next %files or %changelog.
+# Insert a new %files line next to related entries. Most kinds belong
+# to the *main* package's %files section; pkg-config files belong to
+# the devel subpackage's section when the spec has one, and fall back
+# to the main section otherwise. The entry lands just after the first
+# run of related lines in the target section, or at the end of that
+# section when nothing related is there.
 insert_files_entry() {
     local spec=$1
     local path=$2
@@ -294,10 +397,15 @@ insert_files_entry() {
     tmp=$(mktemp)
 
     awk -v path="$path" -v kind="$kind" '
-        BEGIN {
-            inserted = 0
-            files_count = 0
-            last_related = 0
+        {
+            lines[NR] = $0
+            if ($0 ~ /^%files([[:space:]]|$)/) {
+                nsec++
+                if (kind == "pc" && $0 ~ /devel/) has_devel = 1
+            }
+        }
+        END {
+            target = (kind == "pc" && has_devel) ? "devel" : "main"
             if (kind == "plugin") {
                 needle = "job-manager/plugins/|flux/modules/.*\\.so"
             } else if (kind == "command") {
@@ -310,50 +418,51 @@ insert_files_entry() {
                 needle = "\\{_unitdir\\}/"
             } else if (kind == "cron") {
                 needle = "cron"
+            } else if (kind == "library") {
+                needle = "\\.so\\.[0-9]"
+            } else if (kind == "pc") {
+                needle = "pkgconfig"
             } else {
                 needle = ""
             }
-        }
-        /^%files([[:space:]]|$)/ {
-            files_count++
-            # Leaving the main package: insert at the end of it.
-            if (files_count == 2 && !inserted) {
-                print path
-                inserted = 1
+
+            # Span [start, end) of the target %files section.
+            start = 0
+            end = NR + 1
+            cur = 0
+            for (i = 1; i <= NR; i++) {
+                if (lines[i] ~ /^%files([[:space:]]|$)/) {
+                    cur++
+                    if (start && i < end) end = i
+                    if ((target == "main" && cur == 1) || \
+                        (target == "devel" && lines[i] ~ /devel/)) {
+                        start = i
+                    }
+                }
+                if (start && lines[i] ~ /^%changelog/ && i < end) end = i
             }
-            print
-            next
-        }
-        {
-            if (inserted) { print; next }
-            if (files_count == 1 && needle != "" && $0 ~ needle) {
-                last_related = 1
-                print
-                next
-            }
-            # First non-related line after a match: insert so the new
-            # entry sits with the others of its kind.
-            if (files_count == 1 && last_related && !inserted) {
-                print path
-                inserted = 1
-                print
-                next
-            }
-            if (files_count == 1 && !inserted && $0 ~ /^%changelog/) {
-                print path
-                inserted = 1
-                print
-                next
-            }
-            print
-        }
-        END {
-            if (!inserted) {
+            if (!start) {
                 print "ERROR: could not find insertion point for " path > "/dev/stderr"
                 exit 1
             }
+
+            # After the first run of related lines, else section end.
+            insert_at = end - 1
+            in_run = 0
+            for (i = start + 1; i < end; i++) {
+                if (needle != "" && lines[i] ~ needle) {
+                    in_run = 1
+                    insert_at = i
+                } else if (in_run) {
+                    break
+                }
+            }
+            for (i = 1; i <= NR; i++) {
+                print lines[i]
+                if (i == insert_at) print path
+            }
         }
-    ' "$spec" > "$tmp"
+    ' "$spec" > "$tmp" || { rm -f "$tmp"; return 1; }
     mv "$tmp" "$spec"
 }
 
@@ -475,6 +584,8 @@ changelog_note() {
         rc)      echo "- Package ${name} rc hook" ;;
         unit)    echo "- Package ${name} systemd unit" ;;
         cron)    echo "- Package ${name} (cron.daily)" ;;
+        library) echo "- Package ${name%.so.*} (new upstream library)" ;;
+        pc)      echo "- Package ${name} (pkg-config file)" ;;
         man*)    echo "- Package ${kind} pages" ;;
         *)       echo "- Package ${name}" ;;
     esac
@@ -672,6 +783,59 @@ EOF
     "$0" "$spec" "$src" "$notes"
     [[ ! -s "$notes" ]] || { echo "FAIL: cron swap second run was not a no-op" >&2; return 1; }
 
+    # 0.91.0-shaped gap: a new top-level library split out upstream
+    # (libbar, version-info 3:1:2, so .so.1 and .so.1.2.1) plus a new
+    # pkg-config file. The devel %{_libdir}/*.so glob must not hide
+    # the versioned library files, versioned files belong to the main
+    # package, and the .pc file belongs to %files devel.
+    local src2="$tmp/src2" spec2="$tmp/test2.spec" notes2="$tmp/notes2.txt"
+    mkdir -p "$src2/src/common" "$src2/etc"
+    cat > "$src2/src/common/Makefile.am" <<'EOF'
+lib_LTLIBRARIES = libfoo.la libbar.la
+libbar_la_LDFLAGS = \
+	-version-info @LIBBAR_VERSION_INFO@
+EOF
+    cat > "$src2/configure.ac" <<'EOF'
+LIBBAR_CURRENT=3
+LIBBAR_REVISION=1
+LIBBAR_AGE=2
+LIBBAR_VERSION_INFO=$LIBBAR_CURRENT:$LIBBAR_REVISION:$LIBBAR_AGE
+EOF
+    cat > "$src2/etc/Makefile.am" <<'EOF'
+pkgconfig_DATA = foo.pc bar.pc
+EOF
+    cat > "$spec2" <<'EOF'
+Name: foo
+%files
+%{_libdir}/lib%{name}.so.1
+%{_libdir}/lib%{name}.so.1.0.0
+%files devel
+%{_libdir}/*.so
+%{_libdir}/pkgconfig/%{name}.pc
+%changelog
+* Wed Sep 02 2026 test - 1-1
+- initial
+EOF
+    "$0" "$spec2" "$src2" "$notes2"
+    awk '/^%files devel/{devel=1} !devel && /libbar\.so\.1$/{a=1} !devel && /libbar\.so\.1\.2\.1$/{b=1} devel && /pkgconfig\/bar\.pc$/{c=1} END{exit !(a&&b&&c)}' "$spec2" \
+        || { echo "FAIL: 0.91-shaped library/pc placement wrong" >&2; return 1; }
+    grep -q -- '- Package libbar (new upstream library)' "$notes2" \
+        || { echo "FAIL: library changelog note missing" >&2; return 1; }
+    [[ $(grep -c -- '- Package libbar (new upstream library)' "$notes2") -eq 1 ]] \
+        || { echo "FAIL: library changelog note duplicated" >&2; return 1; }
+    grep -q -- '- Package bar.pc (pkg-config file)' "$notes2" \
+        || { echo "FAIL: pkg-config changelog note missing" >&2; return 1; }
+    # The %{name} forms already package libfoo and foo.pc; neither may
+    # be duplicated into %files under its literal name.
+    grep -q 'pkgconfig/foo\.pc' "$spec2" \
+        && { echo "FAIL: foo.pc duplicated despite %{name} entry" >&2; return 1; }
+    grep -q '%{_libdir}/libfoo\.so\.1$' "$spec2" \
+        && { echo "FAIL: libfoo.so.1 duplicated despite %{name} entry" >&2; return 1; }
+
+    # Idempotent.
+    "$0" "$spec2" "$src2" "$notes2"
+    [[ ! -s "$notes2" ]] || { echo "FAIL: 0.91-shaped second run was not a no-op" >&2; return 1; }
+
     echo "self-test passed"
 }
 
@@ -685,6 +849,7 @@ EOF
 SPEC=$1
 SRC=$2
 NOTES=${3:-/tmp/added_files.txt}
+SPEC_NAME=$(sed -n 's/^Name:[[:space:]]*//p' "$SPEC" | head -n1)
 
 [[ -f "$SPEC" ]] || { echo "ERROR: spec not found: $SPEC" >&2; exit 1; }
 [[ -d "$SRC" ]] || { echo "ERROR: source tree not found: $SRC" >&2; exit 1; }
@@ -709,7 +874,8 @@ while IFS=$'\t' read -r path kind; do
 
     echo "Adding to %files: $path ($kind)"
     insert_files_entry "$SPEC" "$path" "$kind"
-    changelog_note "$path" "$kind" >> "$NOTES"
+    note=$(changelog_note "$path" "$kind")
+    grep -qxF -e "$note" "$NOTES" || echo "$note" >> "$NOTES"
     added=$((added + 1))
 
     # Re-read %files so a just-added man5 glob covers later man5 hits.
