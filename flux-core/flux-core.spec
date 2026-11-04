@@ -196,6 +196,8 @@ fi
 %{_libdir}/libflux-hostlist.so.1.0.0
 %{_libdir}/libflux-taskmap.so.1
 %{_libdir}/libflux-taskmap.so.1.0.0
+%{_libdir}/libflux-resourcecount.so.1
+%{_libdir}/libflux-resourcecount.so.1.0.0
 
 # pmi libs required in base pkg not devel
 %{_libdir}/flux/libpmi.so
@@ -275,6 +277,7 @@ fi
 %{_libdir}/pkgconfig/flux-schedutil.pc
 %{_libdir}/pkgconfig/flux-hostlist.pc
 %{_libdir}/pkgconfig/flux-taskmap.pc
+%{_libdir}/pkgconfig/flux-resourcecount.pc
 %{_libdir}/*.so
 %{_includedir}/flux
 %{_mandir}/man3/*.3*
@@ -282,6 +285,7 @@ fi
 %changelog
 * Wed Nov 04 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.91.0-1
 - Update to v0.91.0
+- Package new libflux-resourcecount library and its pkg-config file
 - jobtap: add flux_jobtap_dependency_check () for checking a dependency in a job
 - shell: add support for PMI-1.2 and group barriers
 - shell: factor out PMI kvs for use by other process managers
