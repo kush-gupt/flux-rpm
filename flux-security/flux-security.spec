@@ -1,5 +1,5 @@
 Name:    flux-security
-Version: 0.15.0
+Version: 0.16.0
 Release: 1%{?dist}
 
 Summary: Flux Framework Security Components
@@ -105,6 +105,13 @@ mkdir -p %{buildroot}%{_sysconfdir}/flux/imp/conf.d
 %{_mandir}/man3/*.3*
 
 %changelog
+* Fri Oct 16 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.16.0-1
+- Update to v0.16.0
+- imp: tell job shell userid of enclosing instance
+- imp: exec: restrict job shell environment with an allowlist
+- imp: export FLUX_JOB_RANKS by default in flux-imp run
+- imp: sanitize log messages
+
 * Thu May 28 2026 Kush Gupta <kugupta@redhat.com> - 0.15.0-1
 - Update to v0.15.0
 - Drop 211.patch (merged upstream in v0.15.0)
