@@ -1,0 +1,11 @@
+--- a/configure.ac
++++ b/configure.ac
+@@ -423,7 +423,7 @@
+ ])
+ AM_CONDITIONAL([ENABLE_PYLINT], [test "x$PYLINT" = "xpylint"])
+ 
+-AX_PROG_LUA([5.1],[5.5])
++AX_PROG_LUA([5.1],[5.6])
+ AX_LUA_HEADERS
+ AX_LUA_LIBS
+ AC_MSG_CHECKING([for luaposix])

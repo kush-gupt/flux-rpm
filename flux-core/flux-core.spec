@@ -1,10 +1,11 @@
 Name:    flux-core
 Version: 0.91.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: Flux Resource Manager Framework
 License: LGPL-3.0-only
 URL:     https://github.com/flux-framework/flux-core
 Source0: %{url}/releases/download/v%{version}/%{name}-%{version}.tar.gz
+Patch0:  allow-lua-5.5.patch
 
 # LTO causes a bunch of tests to fail so it should not be used
 %global _lto_cflags %{nil}
@@ -30,7 +31,7 @@ BuildRequires: pkgconfig(uuid)
 BuildRequires: pkgconfig(ncurses)
 BuildRequires: pkgconfig(libarchive)
 BuildRequires: pkgconfig(systemd)
-BuildRequires: (lua-devel >= 5.1 and lua-devel < 5.5)
+BuildRequires: (lua-devel >= 5.1 and lua-devel < 5.6)
 BuildRequires: munge-devel
 BuildRequires: lua-posix
 
@@ -100,6 +101,7 @@ Development files for %{name}.
 
 %prep
 %autosetup -n %{name}-%{version} -p1
+FLUX_VERSION=%{version} autoreconf -fi
 
 %build
 export LC_ALL=en_US.UTF-8
@@ -283,6 +285,11 @@ fi
 %{_mandir}/man3/*.3*
 
 %changelog
+* Wed Nov 04 2026 Kush Gupta <kushalgupta@gmail.com> - 0.91.0-2
+- TEST ONLY (do not merge): allow Lua 5.5 via the fork's configure.ac change
+  (AX_PROG_LUA upper bound 5.5 -> 5.6), regenerate configure with autoreconf,
+  and widen the lua-devel BuildRequires to < 5.6 to validate rawhide builds
+
 * Wed Nov 04 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.91.0-1
 - Update to v0.91.0
 - Package new libflux-resourcecount library and its pkg-config file
