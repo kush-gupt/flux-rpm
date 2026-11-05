@@ -1,5 +1,5 @@
 Name:    flux-sched
-Version: 0.56.0
+Version: 0.57.0
 Release: 1%{?dist}
 Summary: Job Scheduling Facility for Flux Resource Manager Framework
 License: LGPL-3.0-only
@@ -134,6 +134,11 @@ find %{buildroot}%{_libexecdir}/flux/cmd -name '*.py' -exec chmod 755 {} \;
 %{_mandir}/man5/*
 
 %changelog
+* Thu Nov 05 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.57.0-1
+- Update to v0.57.0
+- resource: address partial property RPC success
+- Fix: t/scripts: update waitfile to match core
+
 * Wed Oct 07 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.56.0-1
 - Update to v0.56.0
 - resource: add R properties to JGF nodes
