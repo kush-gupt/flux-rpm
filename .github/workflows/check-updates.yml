@@ -535,16 +535,29 @@ jobs:
           # PRs opened with the repo GITHUB_TOKEN are documented not to
           # start pull_request workflows, but in practice these update
           # PRs do get one (see #94: the dispatched run and a
-          # pull_request run built the same commit twice). Give the
-          # event a moment to materialize and dispatch only if no run
-          # showed up, so each update is built exactly once either way.
-          sleep 30
-          existing=$(gh api \
-            "repos/${GITHUB_REPOSITORY}/actions/workflows/build-test.yml/runs?event=pull_request&head_sha=${HEAD_SHA}" \
-            --jq '.total_count')
-          if [ "${existing:-0}" -gt 0 ]; then
-            echo "build-test already triggered for ${HEAD_SHA} by the pull_request event; skipping dispatch"
-            exit 0
-          fi
+          # pull_request run built the same commit twice). That run can
+          # also sit in 'action_required' until a human approves it,
+          # building nothing: PR #124 stalled that way for five days,
+          # because a run existed for its head SHA and the old check
+          # counted it and skipped the dispatch. So count only runs
+          # that actually ran or will run (status and conclusion both
+          # other than 'action_required'), polling briefly for the
+          # event to materialize, and dispatch only if no runnable run
+          # showed up: workflow_dispatch is exempt from the token
+          # restriction, so it builds immediately, and each update is
+          # still built exactly once in the normal case.
+          for attempt in 1 2 3 4 5 6; do
+            runnable=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/build-test.yml/runs?head_sha=${HEAD_SHA}" \
+              --jq '[.workflow_runs[] | select(.status != "action_required" and .conclusion != "action_required")] | length')
+            if [ "${runnable:-0}" -gt 0 ]; then
+              echo "build-test already triggered for ${HEAD_SHA}; skipping dispatch"
+              exit 0
+            fi
+            if [ "$attempt" -lt 6 ]; then
+              sleep 20
+            fi
+          done
+          echo "::warning::No runnable build-test run for ${HEAD_SHA}; any pull_request run is waiting on manual approval. Dispatching workflow_dispatch instead."
           echo "Triggering Build and Test RPMs on branch: $BRANCH"
           gh workflow run build-test.yml --ref "$BRANCH"
