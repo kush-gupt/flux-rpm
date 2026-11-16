@@ -1,5 +1,5 @@
 Name:    flux-security
-Version: 0.16.0
+Version: 0.17.0
 Release: 1%{?dist}
 
 Summary: Flux Framework Security Components
@@ -105,6 +105,11 @@ mkdir -p %{buildroot}%{_sysconfdir}/flux/imp/conf.d
 %{_mandir}/man3/*.3*
 
 %changelog
+* Mon Nov 16 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.17.0-1
+- Update to v0.17.0
+- imp: send SIGTERM to cgroup after child termination
+- Fix: imp: harden signal handling
+
 * Fri Oct 16 2026 github-actions[bot] <github-actions[bot]@users.noreply.github.com> - 0.16.0-1
 - Update to v0.16.0
 - imp: tell job shell userid of enclosing instance
